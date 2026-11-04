@@ -1,0 +1,204 @@
+# ExoPlaSim Live Monitor
+
+A **read-only, zero-dependency** web monitor for a running [ExoPlaSim](https://github.com/alphaparrot/ExoPlaSim)
+simulation: watch a 3D globe with switchable layers (temperature, precipitation, wind,
+sea-ice cover/thickness, cloud cover), the run parameters, progress, and frame history —
+without touching the model process.
+
+* **Read-only by construction** — the collector only `stat()`s and reads the raw files
+  the model is already writing. Run with and without the monitor, the archived output is
+  bit-for-bit identical (104/104 variables).
+* **Real-time** — parses the growing `plasim_snapshot` file incrementally, one 15-day
+  frame every few seconds. Measured publish latency max 0.81 s.
+* **Low overhead** — 1 Hz polling, only new bytes are read. Measured 0.24 % mean /
+  1.00 % max of one core per run, ~2 ms per poll, ≈100 MB RSS.
+* **Multi-run** — several simulations can run at once; the top-bar selector switches
+  between them (`?run=<run_id>` deep link).
+* **Bilingual UI** — 中文 / English toggle (`?lang=en`).
+* **Zero dependencies** — hand-written WebGL2 globe; no npm, no CDN, no three.js.
+
+![Live monitor (model frame) — sea-ice thickness layer and hover readout](web/_preview/i18n_zh_1366.png)
+
+English UI (`?lang=en`) and Celsius mode:
+
+![English UI](web/_preview/i18n_en_hover.png)
+![Celsius mode](web/_preview/unit_celsius_1366.png)
+
+---
+
+## Quick start
+
+```powershell
+# Windows + WSL2, from the repository root
+pwsh -NoProfile -File ".\monitor\start.ps1"
+```
+
+Then open <http://127.0.0.1:8765/>. `start.ps1` auto-discovers runs under
+`/opt/exoplasim/runs`, waits for the API, and opens the browser.
+
+| Flag | Meaning |
+| --- | --- |
+| `-Port 8770` | HTTP port |
+| `-Workdir /opt/exoplasim/runs/<id>` | pin one run |
+| `-NoBrowser` | do not open a browser |
+| `-Foreground` | run the collector in the current console |
+| `-Stop` | stop the collector |
+
+No simulation yet? Create a 6-month test case (≈40 s on 8 cores):
+
+```bash
+/opt/exoplasim/env/bin/python monitor/test/run_short.py \
+  --spec verify/pleiroma/batch1_T21_20yr/specs/pleiroma_continue.json \
+  --months 6 --outdir monitor/demo --ncpus 8
+```
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for a from-scratch installation
+([中文](docs/DEPLOY.zh-CN.md)).
+
+---
+
+## User interface
+
+* **3D globe** — equirectangular data texture + fragment-shader colour maps (LUT);
+  drag to rotate, wheel to zoom, double-click to reset; lighting / graticule / coastline
+  overlays are individually switchable. Only the **model frame** (rotation axis as pole)
+  is used — the monitor deliberately focuses on the simulation itself.
+* **Layers** — surface temperature `ts` (K), precipitation `pr` (mm/day), wind speed
+  `spd` (m/s) with optional wind vectors, sea-ice **cover** `sic` (0–1), sea-ice
+  **thickness** `sit` (0–9 m), cloud cover `clt` (0–1, shown as %), 2 m air temperature
+  `tas` (K).
+* **Hover readout** — move the pointer over the globe: reprojected latitude/longitude and
+  the nearest-grid-cell value of the current layer plus `ts/tas/spd/sic/sit/clt`;
+  pin a point with `?hover=<lat>,<lon>`.
+* **Temperature units** — `K / °C` toggle (persisted, `?unit=c`); affects the colour-bar
+  ticks, layer title and hover values.
+* **Run selector** — all discovered runs with status/frame count, remembered in
+  `localStorage`; `?run=<run_id>` deep link.
+* **Parameters panel** — resolution/layers/ranks/timestep/snapshot interval, stellar flux
+  and temperature, radius/gravity/rotation/eccentricity/obliquity, gas partial pressures
+  (bar and ppmv), physics filter, boundary files, plus year/step/progress/ETA and the
+  monitor's own CPU/poll cost.
+* **Timeline** — `ts_mean` and `ntr` series, yearly points, history slider and playback;
+  "back to live" returns to the newest frame.
+* **Language** — 中文 / English switch; `?lang=en` deep link.
+* **Self-test** — `http://127.0.0.1:8765/?selftest=1` (20 checks: API, EXOF parsing,
+  WebGL2 render, hover sampling, K→°C, i18n, no third-party requests).
+
+---
+
+## How it works
+
+```
+plasim_snapshot  ← the model appends one 15-day block at a time (authoritative live source)
+plasim_output    ← same structure, monthly/diagnostic output (not required)
+plasim_namelist / planet_namelist / radmod_namelist / <model>.cfg ← parameters
+<outdir>/spec.json ← optional, richest parameter source (merged when available)
+```
+
+The collector (`monitor/collector/`) runs inside WSL, where the files are on ext4:
+
+* reads only **newly appended bytes**, parses only **complete** Fortran records
+  (`marker|header|marker|len|data|marker`), resets cleanly when a file is renamed or truncated;
+* publishes a frame when the last record of a step (`code 329`, `gpi`) arrives and
+  de-duplicates late records — this fixed an early duplicate-frame bug;
+* derives fields with the same conventions as ExoPlaSim's `pyburn`:
+  `pr = (code142 + code143) × 8.64e7` mm/day, `ntr = code178 + code179`,
+  `sic = code210` (0–1), `sit = code211` (0–9 m), `clt = code164` (0–1);
+  wind from divergence/vorticity spectral coefficients through
+  `pyfft.spvgp(...)`, then `reshape(nlev,nlat,nlon)` and `roll(nlon//2)`, near-surface level;
+* resamples the Gaussian grid to a uniform `2×nlat × 2×nlon` grid (T21 → 64×128);
+* infers **years and planned length** from the running process (`exo_run.py --years N`,
+  `--outdir/spec.json`, `run_short.py --months M`) and from completed `MOST.?????.npz`
+  files, because the model itself resets `step` every year and always writes a 1-year
+  namelist while `exo_run` loops `run(years=1)`.
+
+HTTP API (see [CONTRACT.md](CONTRACT.md)):
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /api/runs` | all runs (active first) + status/frames/progress/summary + `default` |
+| `GET /api/state?run=<id>` | grid, layer metadata, params, progress, history, year series, monitor cost |
+| `GET /api/frame?run=<id>&id=<n\|latest>` | EXOF binary: 9 `nlat×nlon` float32 layers |
+| `GET /api/land?run=<id>` | EXOF binary: land mask `lsm` |
+| `GET /` | static frontend |
+
+---
+
+## Verification (measured on this project, T21, 6 model months / 12 frames)
+
+| Item | Result |
+| --- | --- |
+| Frames | 12, steps `[719, 1439, …, 8639]`, strictly increasing, no duplicates |
+| Latency | max **0.81 s**, mean 0.67 s |
+| CPU (collector) | mean **0.24 %**, max **1.00 %** of one core |
+| Poll | max 5.20 ms, mean 1.99 ms |
+| RSS | ≈100 MB (including pyfft) |
+| Numeric check vs archived `.npz` | 12 frames: `max|Δts| = max|Δpr| = max|Δsic| = max|Δsit| = 0`; with `--no-physfilter` also `Δu = Δv = 0` |
+| Read-only proof | run with/without monitor: archived `.npz` **104/104 variables bit-identical** |
+| Years / plan | 6-month run: `year_no=1`, `planned_months=6`; a 20-year run (`exo.ps1 -Years 20`) is reported as `year_no=1`, `planned_months=240`, `year_total=20`, `restart_year=20`; the estimate persists after the process is killed |
+| Multi-run | two concurrent 6-month runs both live, each with 12 frames; cross-session runs are listed too |
+| API verifier | `test/verify_api.py` → **ALL CHECKS PASSED** |
+| Frontend self-test | **20/20** against the real collector (zh and en) |
+
+This repository also keeps a small harness for fast iteration:
+
+* `test/run_short.py` — a ≤6-model-month run (physics unchanged, only the integration
+  interval is shortened) so UI work does not wait for years of simulation;
+* `test/verify_api.py` — HTTP-only acceptance: EXOF parsing, grid, layers, multi-run,
+  and numeric comparison against an archived snapshot;
+* `test/make_fixture.py` + `test/mock_server.py` — record a fixture from any archived
+  `.npz` and replay it through the exact same API (frontend development without a run).
+
+---
+
+## Repository layout
+
+```
+monitor/
+├── start.ps1 / launch_collector.sh   Windows launcher + WSL foreground launcher
+├── start.sh                          manual WSL start
+├── CONTRACT.md                       API/format contract (Chinese; code comments in English)
+├── README.md / README.zh-CN.md       this file, in English / Chinese
+├── docs/DEPLOY.md / DEPLOY.zh-CN.md  from-scratch deployment & debugging
+├── collector/                        read-only parser, state, discovery, HTTP server
+├── web/                              zero-dependency WebGL2 frontend + i18n
+└── test/                             short-run harness, API verifier, fixture & mock
+```
+
+---
+
+## Known limitations
+
+1. **Finished multi-year runs** whose process and `spec.json` are both unavailable cannot
+   reveal their planned length; the monitor falls back to the completed-year count (≥2
+   years) or the namelist's 1 year. Live runs are always inferred correctly.
+2. Wind matching an archived `.npz` exactly requires `--no-physfilter` (archives are
+   written without the physics filter); the default display uses the filter.
+3. History is kept in memory (48 frames/run); restarting the collector loses history for
+   runs whose raw files are already gone.
+4. Only T21 (64×128) is validated with real data; T42 (128×256) follows the same generic
+   path but has not been long-tested here.
+5. The collector must run where `/opt/exoplasim/runs` is readable (WSL). It is not a
+   remote agent; extend it if you need to monitor a different host.
+
+---
+
+## Related project: terrain-stacking coupling
+
+The [`coupling/`](../coupling/README.md) subproject of this repository runs ExoPlaSim externally
+with rewritten `.sra` boundary files to bypass the 9 m sea-ice thickness cap and the 5 m snow cap.
+Its runs live under `/opt/exoplasim/runs/`, so this monitor discovers them automatically
+(the 20-year `pleiroma_20yr_orig` / `pleiroma_20yr_fix` pair was verified with 480 frames each;
+`stack_pilot2`, `xmaxd_3round`, etc. also show up). The monitor is read-only and does not
+affect the coupling scripts.
+
+- Overview / commands: [../coupling/README.md](../coupling/README.md)
+- Design: [../coupling/docs/DESIGN.md](../coupling/docs/DESIGN.md)
+
+---
+
+## License
+
+The monitor code is released under the MIT License (see [LICENSE](LICENSE)).
+ExoPlaSim itself is a separate GPL-3.0 project; this repository only **reads** its
+output files and does not include ExoPlaSim source or binaries.

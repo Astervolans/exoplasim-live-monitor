@@ -1,0 +1,50 @@
+{
+ "ok": true,
+ "default": "20260101-000000_pleiroma",
+ "runs": [
+  {
+   "run_id": "20260101-000000_pleiroma",
+   "modelname": "pleiroma",
+   "status": "running",
+   "workdir": "/opt/exoplasim/runs/20260101-000000_pleiroma",
+   "frame_count": 12,
+   "year_index": 0,
+   "year_no": 1,
+   "year_total": 20,
+   "months_done": 6.0,
+   "planned_months": 240,
+   "planned_years": 20,
+   "progress": 0.025,
+   "wall_elapsed_s": 35.0,
+   "last_update": 0,
+   "summary": {
+    "resolution": "T21",
+    "layers": 10,
+    "ncpus": 8,
+    "flux_W_m2": null
+   }
+  },
+  {
+   "run_id": "20260101-000000_pleiroma_b",
+   "modelname": "pleiroma_b",
+   "status": "running",
+   "workdir": "/opt/exoplasim/runs/20260101-000000_pleiroma_b",
+   "frame_count": 6,
+   "year_index": 0,
+   "year_no": 1,
+   "year_total": 3,
+   "months_done": 1.5,
+   "planned_months": 36,
+   "planned_years": 3,
+   "progress": 0.04,
+   "wall_elapsed_s": 30.0,
+   "last_update": 0,
+   "summary": {
+    "resolution": "T21",
+    "layers": 10,
+    "ncpus": 16,
+    "flux_W_m2": 1200.0
+   }
+  }
+ ]
+}

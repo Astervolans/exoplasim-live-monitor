@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
+<title>行星模拟 · 实时只读监控</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">◐</span>
+    <span class="brand-text"><b data-i18n="brand.name">行星模拟</b><em data-i18n="brand.sub">实时只读监控</em></span>
+  </div>
+
+  <span class="lang-seg" id="langSeg" role="group" aria-label="界面语言" data-i18n-aria-label="lang.label" title="界面语言" data-i18n-title="lang.label">
+    <button type="button" data-lang="zh" aria-pressed="true">中文</button>
+    <button type="button" data-lang="en" aria-pressed="false">EN</button>
+  </span>
+
+  <div class="picker" id="runPicker">
+    <button class="picker-btn" id="pickerBtn" type="button" aria-haspopup="listbox" aria-expanded="false">
+      <span class="dot status-waiting" id="pickerDot"></span>
+      <span class="picker-id" id="pickerLabel" data-i18n="picker.discovering">正在发现模拟…</span>
+      <span class="caret" aria-hidden="true">▾</span>
+    </button>
+    <div class="picker-list" id="pickerList" role="listbox" aria-label="选择模拟" data-i18n-aria-label="aria.chooseRun" hidden></div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="conn" id="conn"><span class="dot status-waiting"></span><span id="connText" data-i18n="conn.connecting">连接中…</span></div>
+  <span class="badge status-waiting" id="statusBadge" data-i18n="status.waiting">等待中</span>
+  <span class="fresh" id="freshness" title="meta.updated 距今" data-i18n-title="title.freshness">—</span>
+  <span class="server" id="serverMeta" title="监控进程自身开销" data-i18n-title="title.server">—</span>
+</header>
+
+<div class="msg-banner" id="msgBanner" hidden></div>
+
+<main>
+  <section class="stage">
+    <div class="globe-wrap" id="globeWrap">
+      <canvas id="globe" aria-label="3D 球体图层显示" data-i18n-aria-label="aria.globe"></canvas>
+      <canvas id="wind" aria-hidden="true"></canvas>
+      <div class="markers" id="markers" aria-hidden="true"></div>
+
+      <div class="hover-card" id="hoverCard" hidden>
+        <div class="hc-coord"><span id="hcLat">—</span> <span id="hcLon">—</span></div>
+        <div class="hc-main"><span class="hc-name" id="hcLayerName">—</span><span class="hc-val" id="hcLayerVal">—</span></div>
+        <div class="hc-grid" id="hcGrid"></div>
+      </div>
+
+      <div class="hud hud-tl">
+        <div class="layer-name" id="layerName" data-i18n="layer.ts">地表温度</div>
+        <div class="layer-meta" id="layerMeta" data-i18n="common.waitingData">等待数据…</div>
+      </div>
+
+      <div class="hud hud-tr">
+        <div class="frame-chip" id="frameChip">—</div>
+        <div class="run-info" id="runInfo" hidden>
+          <span class="ri-id" id="runIdText" title=""></span>
+          <button class="ri-copy" type="button" id="copyRun" title="复制完整 run_id 与 workdir" data-i18n-title="title.copyRun">⧉</button>
+        </div>
+      </div>
+
+      <div class="hud hud-bl">
+        <div class="chip-row">
+          <button class="chip" type="button" data-opt="light" aria-pressed="true" data-i18n="opt.light">光照</button>
+          <button class="chip" type="button" data-opt="grid" aria-pressed="true" data-i18n="opt.grid">经纬网</button>
+          <button class="chip" type="button" data-opt="land" aria-pressed="true" data-i18n="opt.land">陆地</button>
+          <button class="chip" type="button" data-opt="arrows" aria-pressed="true" data-i18n="opt.arrows">风矢</button>
+        </div>
+        <div class="chip-row">
+          <button class="chip" type="button" id="resetView" data-i18n="opt.resetView">复位视角</button>
+        </div>
+      </div>
+
+      <div class="hud hud-br hint" data-i18n="hint.globe">拖拽旋转 · 滚轮缩放 · 双击复位</div>
+
+      <div class="loading" id="loading">
+        <div class="spinner" aria-hidden="true"></div>
+        <span data-i18n="loading.connecting">正在连接监控服务…</span>
+      </div>
+
+      <div class="gl-fallback" id="glFallback" hidden>
+        <h2 data-i18n="gl.title">无法初始化 WebGL2</h2>
+        <p id="glFallbackMsg" data-i18n="gl.msg">当前浏览器/显卡驱动不支持 WebGL2，3D 球体无法显示。</p>
+        <p class="muted" data-i18n="gl.note">其余监控功能（状态、参数、序列图、历史帧）仍可正常使用。</p>
+      </div>
+    </div>
+
+    <div class="timeline">
+      <button class="icon-btn" type="button" id="playBtn" title="播放历史帧" aria-label="播放历史帧" data-i18n-title="btn.play" data-i18n-aria-label="aria.play">▶</button>
+      <input type="range" id="frameSlider" min="0" max="0" value="0" step="1" aria-label="历史帧回溯" data-i18n-aria-label="aria.slider">
+      <span class="tl-label" id="tlLabel">—</span>
+      <button class="ghost-btn" type="button" id="liveBtn" data-i18n="btn.live">回到实时</button>
+    </div>
+  </section>
+
+  <aside class="side">
+    <section class="card card-layers">
+      <div class="card-title"><span data-i18n="layer.title">图层</span> <span class="muted" id="gridInfo"></span>
+        <span class="unit-seg" id="unitSeg" role="group" aria-label="温度单位" data-i18n-aria-label="aria.unit" title="温度显示单位" data-i18n-title="title.unit">
+          <button type="button" data-unit="K" aria-pressed="true">K</button>
+          <button type="button" data-unit="C" aria-pressed="false">°C</button>
+        </span>
+      </div>
+      <div class="layer-grid" id="layerButtons"></div>
+      <div class="cbar">
+        <div class="cbar-grad" id="cbarGrad"></div>
+        <div class="cbar-ticks" id="cbarTicks"><span>—</span></div>
+        <div class="cbar-now" id="cbarNow" data-i18n="common.waitingData">等待数据…</div>
+      </div>
+    </section>
+
+    <section class="card card-progress">
+      <div class="progress-head">
+        <span id="progressPhase" data-i18n="progress.waiting">等待运行数据…</span>
+        <span class="pct" id="progressPct">—</span>
+      </div>
+      <div class="bar"><i id="progressBar" style="width:0%"></i></div>
+      <div class="kv-grid" id="progressKv"></div>
+    </section>
+
+    <section class="card card-chart">
+      <div class="card-title"><span data-i18n="chart.title">序列</span>
+        <span class="legend">
+          <button class="legend-item is-on" type="button" id="legendTs" aria-pressed="true"><i class="sw sw-ts"></i><span data-i18n="legend.ts">ts 均值</span></button>
+          <button class="legend-item" type="button" id="legendNtr" aria-pressed="true"><i class="sw sw-ntr"></i><span data-i18n="legend.ntr">ntr</span></button>
+        </span>
+      </div>
+      <canvas id="chart"></canvas>
+    </section>
+
+    <section class="card card-params">
+      <div class="card-title"><span data-i18n="params.title">参数</span>
+        <span class="muted" id="paramsSource"></span>
+      </div>
+      <div class="params-body" id="paramsBody"><div class="empty" data-i18n="common.waitingParams">等待参数…</div></div>
+    </section>
+  </aside>
+</main>
+
+<div class="selftest" id="selftest" hidden></div>
+
+<script src="i18n.js"></script>
+<script src="colormap.js"></script>
+<script src="globe.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

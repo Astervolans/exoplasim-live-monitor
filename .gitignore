@@ -1,0 +1,36 @@
+# --- runtime data / model artifacts -----------------------------------------
+# never commit simulation outputs, restart files or terrain
+_final*/
+_live_test*/
+_demo*/
+_y20*/
+demo/
+*.npz
+*.sra
+*.nc
+*.h5
+*.hdf5
+*.prt
+plasim_*
+MOST.*
+MOST_*
+
+# --- logs -------------------------------------------------------------------
+*.log
+collector.out.log
+launcher.out.log
+launcher.err.log
+
+# --- python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- OS / editor ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.idea/
+.vscode/
