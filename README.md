@@ -48,12 +48,12 @@ No simulation yet? Create a 6-month test case (≈40 s on 8 cores):
 
 ```bash
 /opt/exoplasim/env/bin/python monitor/test/run_short.py \
-  --spec verify/pleiroma/batch1_T21_20yr/specs/pleiroma_continue.json \
+  --spec <your-spec>.json \
   --months 6 --outdir monitor/demo --ncpus 8
 ```
-
-See [docs/DEPLOY.md](docs/DEPLOY.md) for a from-scratch installation
-([中文](docs/DEPLOY.zh-CN.md)).
+`<your-spec>.json` is any ExoPlaSim run specification (for Pleiroma, the preset
+project's `preset/specs/pleiroma.json` plus a restart file works). See
+[docs/DEPLOY.md](docs/DEPLOY.md) for a from-scratch installation ([中文](docs/DEPLOY.zh-CN.md)).
 
 ---
 

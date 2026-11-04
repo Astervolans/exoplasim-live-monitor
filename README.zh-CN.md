@@ -45,11 +45,11 @@ pwsh -NoProfile -File ".\monitor\start.ps1"
 
 ```bash
 /opt/exoplasim/env/bin/python monitor/test/run_short.py \
-  --spec verify/pleiroma/batch1_T21_20yr/specs/pleiroma_continue.json \
+  --spec <your-spec>.json \
   --months 6 --outdir monitor/demo --ncpus 8
 ```
 
-从零部署见 [docs/DEPLOY.zh-CN.md](docs/DEPLOY.zh-CN.md)（[English](docs/DEPLOY.md)）。
+`<your-spec>.json` 是任意 ExoPlaSim 运行 spec（Pleiroma 可用预设项目的 `preset/specs/pleiroma.json` + restart 文件）。从零部署见 [docs/DEPLOY.zh-CN.md](docs/DEPLOY.zh-CN.md)（[English](docs/DEPLOY.md)）。
 
 ---
 

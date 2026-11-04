@@ -138,7 +138,7 @@ pwsh -NoProfile -File ".\monitor\start.ps1" -NoBrowser
 
 ```bash
 /opt/exoplasim/env/bin/python "/mnt/<盘符>/<仓库>/monitor/test/run_short.py" \
-  --spec "/mnt/<盘符>/<仓库>/verify/pleiroma/batch1_T21_20yr/specs/pleiroma_continue.json" \
+  --spec "/mnt/<盘符>/<仓库>/<your-spec>.json" \
   --months 6 --outdir "/mnt/<盘符>/<仓库>/monitor/demo" --ncpus 8
 ```
 

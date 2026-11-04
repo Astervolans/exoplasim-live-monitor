@@ -148,7 +148,7 @@ Either attach to a run you already started, or create a 6-month test case
 
 ```bash
 /opt/exoplasim/env/bin/python "/mnt/<drive>/<repo>/monitor/test/run_short.py" \
-  --spec "/mnt/<drive>/<repo>/verify/pleiroma/batch1_T21_20yr/specs/pleiroma_continue.json" \
+  --spec "/mnt/<drive>/<repo>/<your-spec>.json" \
   --months 6 --outdir "/mnt/<drive>/<repo>/monitor/demo" --ncpus 8
 ```
 
