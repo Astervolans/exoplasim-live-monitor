@@ -17,7 +17,7 @@ without touching the model process.
 * **Bilingual UI** — 中文 / English toggle (`?lang=en`).
 * **Zero dependencies** — hand-written WebGL2 globe; no npm, no CDN, no three.js.
 
-![Live monitor (model frame) — sea-ice thickness layer and hover readout](web/_preview/i18n_zh_1366.png)
+![Live monitor — real T21 run, 0-based year, land mask and hover readout](web/_preview/real_land_hover.png)
 
 English UI (`?lang=en`) and Celsius mode:
 

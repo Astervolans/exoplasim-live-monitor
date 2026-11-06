@@ -14,7 +14,7 @@
 * **中英双语**：中文 / English 切换（`?lang=en`）。
 * **零依赖**：手写 WebGL2 球体，不需要 npm / CDN / three.js。
 
-![实时监控（模型系）——海冰厚度图层与悬停读数](web/_preview/i18n_zh_1366.png)
+![实时监控——真实 T21 算例、年份从 0 开始、陆地掩膜与悬停读数](web/_preview/real_land_hover.png)
 
 英文界面（`?lang=en`）与摄氏度模式：
 
