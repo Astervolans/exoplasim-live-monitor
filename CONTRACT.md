@@ -36,7 +36,9 @@ Windows 浏览器  ──HTTP──>  127.0.0.1:8765  (WSL2 内 python, /opt/exo
   `Start-Process` 起一个**前台常驻**的 `wsl.exe` 跑 collector（`launch_collector.sh` 里 `exec`），
   停止时 `pkill` collector。不要用 `nohup ... &` 之类后台化。
 - collector 默认从 `/opt/exoplasim/runs` 自动发现**最新**且含 `plasim_namelist` 的运行目录；`--workdir` 可固定。
-  `*_crashed/`（ExoPlaSim 崩溃转储）与 `_*` 临时目录一律排除。
+  `*_crashed/`（ExoPlaSim 崩溃转储）与 `_*` 临时目录一律排除。 
+- 发现范围是**两层**：`<runs-root>/<case>/` 与 `<runs-root>/<case>/<round>/`； 
+  嵌套 run 的 `run_id` 用 `parent__child`（如 `pl_s1__run_round_002`），`workdir` 仍是真实路径。
 - collector 同时把 `monitor/web/` 作为静态目录提供服务（默认 = `collector/` 的兄弟目录 `../web`）。
 
 ## 2. HTTP 接口
@@ -57,7 +59,7 @@ Windows 浏览器  ──HTTP──>  127.0.0.1:8765  (WSL2 内 python, /opt/exo
     {"run_id": "20261104-133732_pleiroma", "modelname": "pleiroma",
      "status": "running",              // running|configuring|waiting|finished|error
      "workdir": "/opt/exoplasim/runs/20261104-133732_pleiroma",
-     "frame_count": 7, "year_index": 1, "year_no": 2, "year_total": 20,
+     "frame_count": 7, "year_index": 1, "year_no": 1, "completed_years": 1, "year_total": 20,
      "months_done": 13.5, "planned_months": 240, "planned_years": 20,
      "progress": 0.056,
      "wall_elapsed_s": 21.3, "last_update": 1762345688.9,
@@ -88,8 +90,9 @@ Windows 浏览器  ──HTTP──>  127.0.0.1:8765  (WSL2 内 python, /opt/exo
     "status": "running",            // running | configuring | finished | waiting | error
     "status_text": "运行中 · 第 2 年 第 3 月",
     "wall_elapsed_s": 21.3,
-    "year_index": 1,                 // 0 基：**已完成**的整年数
-    "year_no": 2,                    // 1 基：正在跑的这一年（= year_index+1）
+    "year_index": 1,                 // 当前帧所属的年（0 基；第 0 年 = 第一个模拟年）
+    "year_no": 1,                    // 与 year_index 相同（0 基，便于前端直接用）
+    "completed_years": 1,            // 磁盘上已完成的整年数（MOST.?????.npz 计数）
     "restart_year": 20,              // 可选：从 MOST_REST.00019 续跑时给出（物理起始年，1 基）
     "year_total": 20,                // 可选：本次 run 计划总年数
     "frames_total": 7,
@@ -99,7 +102,7 @@ Windows 浏览器  ──HTTP──>  127.0.0.1:8765  (WSL2 内 python, /opt/exo
     "progress": 0.25,                // 0..1，相对 planned_months
     "eta_s": 26.0,
     "sim_day": 45.0,                 // 该"年"内第几天（360 天/年）
-    "sim_date": "第 2 年 · 第 3 月 · 第 15 天",   // 年/月/日均为 1 基
+    "sim_date": "第 1 年 · 第 3 月 · 第 15 天",   // 年 0 基；月/日 1 基
     "step": 2160, "steps_per_year": 17280,
     "msg": null
   },
@@ -118,11 +121,11 @@ Windows 浏览器  ──HTTP──>  127.0.0.1:8765  (WSL2 内 python, /opt/exo
     "tas": {"name": "2 m 气温", "unit": "K",  "range": [180, 330], "min": 227.7, "max": 326.8, "kind": "scalar"}
   },
   "frame": {"id": 6, "step": 4319, "year": 0, "frame_in_year": 5,
-            "wall": 1762345678.9, "sim_date": "第 0 年 · 第 3 月 · 0 天",
+            "wall": 1762345678.9, "sim_date": "第 0 年 · 第 3 月 · 15 天",
             "ts_mean": 271.42, "ntr_mean": -1.83, "complete": true},
   "history": [
     {"id": 0, "step": 719, "year": 0, "frame_in_year": 0, "wall": 1762345600.0,
-     "sim_date": "第 0 年 · 第 0 月 · 15 天", "ts_mean": 271.5, "ntr_mean": -2.0}
+     "sim_date": "第 0 年 · 第 1 月 · 15 天", "ts_mean": 271.5, "ntr_mean": -2.0}
   ],
   "year_series": [
     {"year": 0, "ts_area": 271.84, "ntr": -1.37, "sic_area": 0.42, "ts_at_step": [271.5, 271.6]}
@@ -256,7 +259,7 @@ header JSON：
 | 目录还没建 | `status:"waiting"`，每秒重扫（自动发现模式下） |
 | configure 中（无 raw） | `status:"configuring"`，能读 namelist 就填 params |
 | raw 出现/增长 | `status:"running"`，解析新 record，凑满一帧就发布 |
-| raw 被改名（年末） | 完成最后一帧；下一年的 raw 出现后继续；`year_index += 1` |
+| raw 被改名（年末） | 完成最后一帧（仍属于旧年）；新 raw 出现后 `raw_year += 1`，进入下一年 |
 | 运行结束（目录消失/最终 npz 出现） | `status:"finished"`；保留最后帧与 history；不再增长 |
 | 记录撕裂/半条 | 只解析完整记录；下轮重试，不抛异常 |
 | 解析/读取异常 | 记录到 `run.msg` 与日志，继续服务旧状态 |
@@ -290,6 +293,7 @@ header JSON：
   2 s 轮询 runs 以发现新 run；把选择记在 `localStorage`，刷新后仍看同一个 run（不存在则回退 default）。
   支持 `?run=<run_id>` 深链（优先于 localStorage，便于截图/分享）。
   标题区同时显示当前 run 的完整 `run_id` 与 workdir（可复制）。
+- **年份从 0 开始**（第 0 年 = 第一个模拟年）；前端直接用 `run.year_no`，不要自行 +1。 
 - 状态徽标：运行中(绿)/配置中(黄)/等待(灰)/已结束(蓝)/错误(红)，以及 `updated` 距今秒数（>5s 变黄）。
 - **语言**：中文 / English 切换（顶栏、localStorage 记忆、`?lang=zh|en` 深链、`<html lang>` 同步）。
   所有用户可见文案（含图层名、状态、参数标签、自检、悬停、aria/title）都要双语；

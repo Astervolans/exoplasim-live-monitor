@@ -146,7 +146,7 @@ pwsh -NoProfile -File ".\monitor\start.ps1" -NoBrowser
 （例如 `exo.ps1 run`）。
 
 collector 会自动发现最近 `--recent-minutes`（默认 120）分钟内变动过、且含
-`plasim_namelist` 的 `/opt/exoplasim/runs/*` 目录，并列进顶栏的模拟选择器。
+`plasim_namelist` 的 `/opt/exoplasim/runs/**` 目录（顶层 + 下一层，例如 `<case>/run_round_002/`），并列进顶栏的模拟选择器；嵌套 run 的 id 形如 `pl_s1__run_round_002`。
 
 ---
 

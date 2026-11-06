@@ -164,9 +164,10 @@ def main(argv=None) -> int:
 
     run = state["run"]
     if run.get("year_no") is not None:
-        check(run["year_no"] >= 1, "year_no 是 1 基（= %s）" % run["year_no"], failures)
-        check(run.get("sim_date") and "第 0 年" not in str(run.get("sim_date")),
-              "sim_date 不是第 0 年（= %s）" % run.get("sim_date"), failures)
+        check(run["year_no"] >= 0, "year_no 从 0 开始（= %s）" % run["year_no"], failures)
+        sim_date = str(run.get("sim_date") or "")
+        check(("第 %d 年" % run["year_no"]) in sim_date,
+              "sim_date 与 year_no 一致（%s / %s）" % (run["year_no"], sim_date), failures)
     if run.get("planned_months"):
         check(run["planned_months"] >= (run.get("months_done") or 0) * 0.5,
               "planned_months 与 months_done 不矛盾（%s vs %s）"

@@ -122,6 +122,12 @@ class RunMonitor:
         self._plan_ttl = 2.0
         self._year_renames = 0        # 文件名改名事件计数（跨年兜底）
         self._active_raw = False
+        # 当前 raw 文件属于第几年（0 基，用户要求年从 0 开始）。
+        # 不能直接用 workdir 里 npz 的数量：年末改名/写出 npz 的那小段时间，最新帧
+        # 仍属于上一年，混用会把最后一年叠加一次（第 1 年 11 月 → 第 2 年 12 月）。
+        self.raw_year = None
+        # raw 曾经消失过（年末改名/删除）：再次打开时应进入下一年。
+        self._raw_was_missing = True
 
     # -------------------------------------------------------- 生命周期
     def poll(self, now=None):
@@ -156,11 +162,31 @@ class RunMonitor:
             if kind == "frame":
                 if payload is not None:
                     self._on_frame(payload, now)
+            elif kind == "open":
+                # 第一次打开 raw：它属于「已完成的整年数」对应的那一年（0 基）。
+                # 如果 raw 之前消失过（年末改名/删除），重新出现说明进入了下一年。
+                if self.raw_year is None:
+                    self.raw_year = int(self.year_index or 0)
+                    LOG.info("[%s] raw opened -> raw_year=%d",
+                             self.run_id, self.raw_year)
+                elif self._raw_was_missing:
+                    self.raw_year += 1
+                    LOG.info("[%s] raw reopened after gap -> raw_year=%d",
+                             self.run_id, self.raw_year)
+                self._raw_was_missing = False
             elif kind == "reset":
-                if info and info.get("reason") == "replaced":
+                reason = (info or {}).get("reason")
+                if reason == "replaced":
                     self._year_renames += 1
-                    LOG.info("[%s] year file renamed -> renames=%d, year_index=%d",
-                             self.run_id, self._year_renames, self.year_index)
+                    # 旧 raw 被改名 = 旧的一年结束；接下来的 raw 是下一年。
+                    if self.raw_year is None:
+                        self.raw_year = int(self.year_index or 0)
+                    self.raw_year += 1
+                    self._raw_was_missing = False
+                    LOG.info("[%s] year file renamed -> raw_year=%d (disk years=%d)",
+                             self.run_id, self.raw_year, self.year_index)
+                elif reason == "gone":
+                    self._raw_was_missing = True
             elif kind == "error":
                 self.msg = (info or {}).get("msg")
                 LOG.warning("[%s] parse: %s", self.run_id, self.msg)
@@ -282,10 +308,11 @@ class RunMonitor:
         if self.resampler is None:
             self.msg = "模型网格未知，暂不发布帧"
             return
+        year = self.raw_year if self.raw_year is not None else int(self.year_index or 0)
         try:
             frame = state.build_frame(
                 raw, self.resampler, self.params, self.raw_params,
-                year_index=self.year_index,
+                year_index=year,
                 frame_in_year=max(0, self.frames.total),
                 frame_id=self.frames.total,
                 physfilter=self.physfilter,
@@ -297,13 +324,13 @@ class RunMonitor:
             return
         progress = state.progress_info(frame.step, self.params, self.raw_params,
                                        self.wall_elapsed(now),
-                                       year_index=self.year_index, active=True)
+                                       year_index=year, active=True)
         frame.sim_date = progress["sim_date"]
         self.frames.add(frame)
         self.last_update = now
         self.status = "running"
-        LOG.info("[%s] frame #%d step=%d ts_mean=%.2fK (%d frames)",
-                 self.run_id, frame.id, frame.step, frame.ts_mean, self.frames.total)
+        LOG.info("[%s] frame #%d year=%d step=%d ts_mean=%.2fK (%d frames)",
+                 self.run_id, frame.id, year, frame.step, frame.ts_mean, self.frames.total)
 
     # -------------------------------------------------------- 参数
     def _refresh_params(self):
@@ -348,9 +375,17 @@ class RunMonitor:
 
     def progress(self, now=None):
         frame = self.latest()
+        # 进度必须以「最新帧所属年份」为准，而不是磁盘上已完成的年数：
+        # 年末改名与 npz 落盘之间有一小段空档，用后者会把最后一年叠加一次。
+        if frame is not None:
+            year = int(frame.year or 0)
+        elif self.raw_year is not None:
+            year = int(self.raw_year)
+        else:
+            year = int(self.year_index or 0)
         return state.progress_info(frame.step if frame else 0, self.params,
                                    self.raw_params, self.wall_elapsed(now),
-                                   year_index=self.year_index,
+                                   year_index=year,
                                    active=self._active_raw)
 
     def status_text(self, now=None):
@@ -384,6 +419,7 @@ class RunMonitor:
             "frame_count": self.frames.total,
             "year_index": prog["year_index"],
             "year_no": prog["year_no"],
+            "completed_years": self.year_index,
             "months_done": prog["months_done"],
             "planned_months": self.params.get("planned_months"),
             "planned_years": self.params.get("planned_years"),
@@ -430,6 +466,7 @@ class RunMonitor:
             "wall_elapsed_s": round(self.wall_elapsed(now), 1),
             "year_index": prog["year_index"],
             "year_no": prog["year_no"],
+            "completed_years": self.year_index,
             "restart_year": self.params.get("restart_year"),
             "year_total": self.params.get("year_total"),
             "frames_total": self.frames.total,
@@ -451,7 +488,7 @@ class RunMonitor:
                 "id": frame.id,
                 "step": frame.step,
                 "year": frame.year,
-                "year_no": frame.year + 1,
+                "year_no": frame.year,
                 "frame_in_year": frame.frame_in_year,
                 "wall": frame.wall,
                 "sim_date": frame.sim_date,

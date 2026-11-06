@@ -19,7 +19,7 @@
   "status_text": "运行中（fixture 回放 B）",
   "wall_elapsed_s": 35.0,
   "year_index": 0,
-  "year_no": 1,
+  "year_no": 0,
   "year_total": 3,
   "planned_years": 3,
   "restart_year": 20,
@@ -30,7 +30,7 @@
   "progress": 0.04,
   "eta_s": 25.0,
   "sim_day": 45.0,
-  "sim_date": "第 1 年 · 第 2 月 · 第 15 天",
+  "sim_date": "第 0 年 · 第 2 月 · 第 15 天",
   "step": 719,
   "steps_per_year": 17280,
   "msg": null

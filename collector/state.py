@@ -601,18 +601,16 @@ def frame_stats_extra(unified):
 # ---------------------------------------------------------------- 进度
 def progress_info(step, params, raw_params, wall_elapsed_s, frames_total=0,
                   year_index=0, active=True):
-    """由「已完成整年数 + 当前年的 step」推年/月/日、months_done、progress、ETA。
+    """由「当前帧所属年份 + 该帧 step」推年/月/日、months_done、progress、ETA。
 
-    ``year_index`` = workdir 里 ``MOST.?????.npz`` / ``MOST_REST.?????`` /
-    ``MOST_DIAG.?????`` 的最大序号 + 1（**已完成**的整年数，0 基）。这是因为
-    exo_run 逐年调用 ``model.run(years=1)``，每条新 raw 的 step 都从 719 重新开始，
-    只看 step 会永远停在第 0 年。
+    ``year_index`` 是**当前帧所属的年**（0 基，用户要求从 0 开始数）。它不再用
+    workdir 里的 ``MOST.?????.npz`` 数量直接推——因为年末 raw 被改名、npz 刚写出的
+    那一小段时间里，最新帧仍属于上一年，直接用「已完成年数」会把最后一年再叠加一次
+    （实测表现为：第 1 年 11 月 → 第 2 年 12 月）。帧的年份由 collector 按 raw 文件
+    代次（每换一次 raw +1）维护，见 ``server.Run.raw_year``。
 
-    * ``months_done = year_index*12 + (step+1)/每步每月``（step 从 1 计，故 719 →
-      0.5 个月，8639 → 6.0 个月，全是整齐数）。
-    * ``sim_date`` 的**年/月**用 1 基（契约 v2），日取当月第几天（1..30）。
-    * 运行结束/两帧之间没有活跃 raw 时，当前年的月数记 0，避免把最后一年的整年
-      再叠加一次（``active=False``）。
+    * ``months_done = year_index*12 + (step+1)/每步每月``；一年内截断在 12 个月。
+    * ``sim_date`` 的年/日为 1 基的“显示编号”，**年从 0 开始**（第 0 年 = 第一个模拟年）。
     """
     steps_per_year = raw_params.get("physical_year_steps") or 17280
     steps_per_month = steps_per_year / 12.0
@@ -624,12 +622,7 @@ def progress_info(step, params, raw_params, wall_elapsed_s, frames_total=0,
     months_in_year = (step + 1) / steps_per_month if steps_per_month else 0.0
     # 一年最多 12 个月（step 越过整年时截断，防止末帧越界）
     months_in_year = min(12.0, months_in_year)
-    if not active and year_index > 0:
-        months_done = float(year_index * 12)
-    elif not active and year_index == 0:
-        months_done = months_in_year          # 短跑结束：按最后一帧的 step 报
-    else:
-        months_done = year_index * 12 + months_in_year
+    months_done = year_index * 12 + months_in_year
     if planned and planned > 0:
         months_done = min(months_done, float(planned))
 
@@ -648,18 +641,16 @@ def progress_info(step, params, raw_params, wall_elapsed_s, frames_total=0,
     month1 = min(12, max(1, int(math.ceil(day_of_year / 30.0))))
     day1 = int(round(day_of_year - (month1 - 1) * 30.0))
     day1 = min(30, max(1, day1))                          # 1 基：月初显示第 1 天
-    # 已结束的 run 没有「正在跑的第 year_index+1 年」，最后完成的是第 year_index 年。
-    year_no = year_index + 1 if (active or year_index == 0) else year_index
     return {
         "step": step,
         "steps_per_year": steps_per_year,
         "year_index": year_index,
-        "year_no": year_no,                              # 1 基
+        "year_no": year_index,                           # 0 基（第 0 年 = 第一年）
         "months_done": round(months_done, 3),
         "progress": _round(progress, 4),
         "eta_s": _round(eta_s, 1),
         "sim_day": round(day_of_year, 2),
-        "sim_date": "第 %d 年 · 第 %d 月 · %d 天" % (year_no, month1, day1),
+        "sim_date": "第 %d 年 · 第 %d 月 · %d 天" % (year_index, month1, day1),
         "month": month1,
         "day": day1,
     }

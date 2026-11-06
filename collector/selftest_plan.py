@@ -12,7 +12,7 @@
       - --run-mode balance + maxyears=120 → 120 年
   * ``state.build_params``：上述 plan 合并进 params（planned_months/planned_years/
     year_total/run_mode/restart_year）
-  * ``state.progress_info``：1 基年/月、跨年后 months_done 连续、6 个月 → 6.0
+  * ``state.progress_info``：年从 0 开始、跨年后 months_done 连续、6 个月 → 6.0
   * ``state.FRAME_ORDER`` / ``LAYER_META`` 含 sit（EXOF 9 层）
 """
 from __future__ import annotations
@@ -147,15 +147,15 @@ def main():
         params = {"planned_months": 240.0}
         raw = {"physical_year_steps": 17280, "nstps": 720}
         prog = state.progress_info(719, params, raw, 10.0, year_index=0, active=True)
-        check(prog["year_no"] == 1 and prog["months_done"] == 0.5,
-              "第 1 帧：year_no=1, months_done=0.5（实际 %s）" % prog["months_done"])
-        check(prog["sim_date"] == "第 1 年 · 第 1 月 · 15 天",
-              "sim_date 1 基: %s" % prog["sim_date"])
+        check(prog["year_no"] == 0 and prog["months_done"] == 0.5,
+              "第 1 帧：year_no=0, months_done=0.5（实际 %s）" % prog["months_done"])
+        check(prog["sim_date"] == "第 0 年 · 第 1 月 · 15 天",
+              "sim_date 0 基: %s" % prog["sim_date"])
         prog = state.progress_info(719, params, raw, 10.0, year_index=10, active=True)
         check(abs(prog["months_done"] - 120.5) < 1e-9,
-              "第 11 年第 1 帧 → months_done 120.5（实际 %s）" % prog["months_done"])
-        check(prog["sim_date"].startswith("第 11 年"),
-              "第 11 年 sim_date: %s" % prog["sim_date"])
+              "第 11 年（0 基 10）第 1 帧 → months_done 120.5（实际 %s）" % prog["months_done"])
+        check(prog["sim_date"].startswith("第 10 年"),
+              "第 11 年 sim_date（0 基 = 10）: %s" % prog["sim_date"])
         prog = state.progress_info(8639, {"planned_months": 6.0}, raw, 40.0,
                                    year_index=0, active=True)
         check(prog["months_done"] == 6.0, "6 个月短跑末帧 months_done=6.0（实际 %s）"

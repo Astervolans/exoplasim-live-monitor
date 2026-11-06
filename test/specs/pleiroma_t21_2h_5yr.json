@@ -1,0 +1,33 @@
+{
+  "_comment": "监控跨年验收：T21 / 2h 步长 / 5 个模拟年。只用于验证年份滚动（比 30min 步长快 4 倍），不是生产配置。",
+  "_comment_restart": "从 Pleiroma 第 20 年末 restart 续跑；restart 是物理状态，与时间步长无关。",
+  "modelname": "pleiroma_2h",
+  "model_class": "Model",
+  "resolution": "T21",
+  "layers": 10,
+  "outputtype": ".npz",
+  "afterConfigure": ["/opt/exoplasim/topo/N032_surf_0169.sra"],
+  "configure": {
+    "flux": 1590.0,
+    "startemp": 3000.0,
+    "radius": 1.25,
+    "gravity": 13.34,
+    "pN2": 1.1856,
+    "pO2": 0.5472,
+    "pAr": 0.09047,
+    "pCO2": 0.0007296,
+    "rotationperiod": 18.3,
+    "synchronous": true,
+    "obliquity": 0.0,
+    "eccentricity": 0.035,
+    "fixedorbit": true,
+    "timestep": 120.0,
+    "snapshots": 120,
+    "physicsfilter": "gp|exp|sp",
+    "ozone": false,
+    "landmap": "/opt/exoplasim/topo/terra_rot_surf_0172.sra",
+    "topomap": "/opt/exoplasim/topo/terra_rot_surf_0129.sra",
+    "restartfile": "/opt/exoplasim/runs/pleiroma/MOST_REST.00019"
+  },
+  "run": {"mode": "years", "years": 5}
+}

@@ -30,7 +30,7 @@ $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $UnixHere = '/mnt/' + $Here.Substring(0, 1).ToLower() + $Here.Substring(2).Replace('\', '/')
 $Launch = "$UnixHere/launch_collector.sh"
 $LogWin = Join-Path $Here 'collector.log'
-$LogWsl = '/tmp/monitor_collector.log'
+$LogWsl = '/opt/exoplasim/logs/monitor_collector.log'
 $Url = "http://127.0.0.1:$Port/"
 
 function ConvertTo-WslPath {
@@ -43,7 +43,7 @@ function ConvertTo-WslPath {
 
 function Test-Monitor {
     try {
-        $resp = Invoke-WebRequest -Uri ($Url + 'api/state') -UseBasicParsing -TimeoutSec 2
+        $resp = Invoke-WebRequest -Uri ($Url + 'api/runs') -UseBasicParsing -TimeoutSec 2
         return ($resp.StatusCode -eq 200)
     } catch {
         return $false
@@ -103,7 +103,7 @@ while ((Get-Date) -lt $deadline) {
     if (Test-Monitor) { $ok = $true; break }
 }
 if (-not $ok) {
-    Write-Warning "[monitor] 25 s 内没等到 ${Url}api/state。WSL 日志末尾："
+    Write-Warning "[monitor] 25 s 内没等到 ${Url}api/runs。WSL 日志末尾："
     & wsl.exe -d $Distro -u root -- bash -lc "tail -40 $LogWsl 2>/dev/null || echo '(无日志)'"
     exit 1
 }

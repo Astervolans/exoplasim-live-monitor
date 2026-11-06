@@ -34,3 +34,7 @@ desktop.ini
 *.swp
 .idea/
 .vscode/
+
+# local demo/validation outputs
+/_crossyear/
+/_run*/

@@ -81,8 +81,8 @@ project's `preset/specs/pleiroma.json` plus a restart file works). See
 * **Timeline** — `ts_mean` and `ntr` series, yearly points, history slider and playback;
   "back to live" returns to the newest frame.
 * **Language** — 中文 / English switch; `?lang=en` deep link.
-* **Self-test** — `http://127.0.0.1:8765/?selftest=1` (20 checks: API, EXOF parsing,
-  WebGL2 render, hover sampling, K→°C, i18n, no third-party requests).
+* **Self-test** — `http://127.0.0.1:8765/?selftest=1` (21 checks: API, EXOF parsing,
+  WebGL2 render, hover sampling, K→°C, i18n, pointer hover, land mask, no third-party requests).
 
 ---
 
@@ -135,10 +135,11 @@ HTTP API (see [CONTRACT.md](CONTRACT.md)):
 | RSS | ≈100 MB (including pyfft) |
 | Numeric check vs archived `.npz` | 12 frames: `max|Δts| = max|Δpr| = max|Δsic| = max|Δsit| = 0`; with `--no-physfilter` also `Δu = Δv = 0` |
 | Read-only proof | run with/without monitor: archived `.npz` **104/104 variables bit-identical** |
-| Years / plan | 6-month run: `year_no=1`, `planned_months=6`; a 20-year run (`exo.ps1 -Years 20`) is reported as `year_no=1`, `planned_months=240`, `year_total=20`, `restart_year=20`; the estimate persists after the process is killed |
-| Multi-run | two concurrent 6-month runs both live, each with 12 frames; cross-session runs are listed too |
+| Years / plan | 6-month run: `year_no=0`, `planned_months=6`; a 20-year run (`exo.ps1 -Years 20`) is reported as `year_no=0`, `planned_months=240`, `year_total=20`, `restart_year=20`; the estimate persists after the process is killed |
+| Cross-year (5 years, 2 h timestep) | 180 frames; year sequence 0→1→2→3→4 with each transition `(Y, 12, 30) → (Y+1, 1, 20)`; no `第 N+1 年 · 第 12 月` jump. Script: `test/watch_crossyear.py` |
+| Multi-run | two concurrent 6-month runs both live, each with 12 frames; cross-session runs are listed too, including nested `<root>/<case>/run_round_NNN/` workdirs |
 | API verifier | `test/verify_api.py` → **ALL CHECKS PASSED** |
-| Frontend self-test | **20/20** against the real collector (zh and en) |
+| Frontend self-test | **21/21** against the real collector (zh and en; includes pointer hover, land mask, i18n, K→°C) |
 
 This repository also keeps a small harness for fast iteration:
 

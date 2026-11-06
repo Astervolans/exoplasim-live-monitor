@@ -90,18 +90,18 @@ def run_state(run_id: str) -> dict:
     meta = run["frames"][frame_id]
     history = []
     for index, item in enumerate(template["history"][: frame_id + 1]):
-        year_no = 1 + index // 4
+        year_no = index // 4
         month = 1 + (index % 4) * 3
         history.append({
-            "id": index, "step": item["step"], "year": year_no - 1,
+            "id": index, "step": item["step"], "year": year_no,
             "year_no": year_no, "frame_in_year": index % 4,
             "wall": time.time() - (frame_id - index) * 3.0,
             "sim_date": "第 %d 年 · 第 %d 月 · 15 天" % (year_no, month),
             "ts_mean": item["ts_mean"], "ntr_mean": item.get("ntr_mean"),
         })
-    year_no = 1 + frame_id // 4
+    year_no = frame_id // 4
     month = 1 + (frame_id % 4) * 3
-    months_done = round((year_no - 1) * 12 + (month - 1) + 0.5, 2)
+    months_done = round(year_no * 12 + (month - 1) + 0.5, 2)
     planned = template["run"]["planned_months"] or (len(run["frames"]) * 0.5)
     state = template
     state["server"].update({"uptime_s": round(time.time() - STARTED, 1),
@@ -116,7 +116,7 @@ def run_state(run_id: str) -> dict:
         "frames_total": frame_id + 1,
         "planned_months": planned,
         "planned_years": round(planned / 12.0, 2),
-        "year_index": year_no - 1,
+        "year_index": year_no,
         "year_no": year_no,
         "months_done": months_done,
         "progress": round(min(1.0, months_done / planned), 4) if planned else 0.0,
@@ -127,7 +127,7 @@ def run_state(run_id: str) -> dict:
         "frames_in_year": frame_id + 1,
     })
     state["frame"] = {
-        "id": frame_id, "step": meta["step"], "year": year_no - 1,
+        "id": frame_id, "step": meta["step"], "year": year_no,
         "year_no": year_no, "frame_in_year": frame_id % 4,
         "wall": time.time(), "sim_date": state["run"]["sim_date"],
         "ts_mean": float(np.mean(arrays["ts"])),
@@ -151,10 +151,10 @@ def runs_doc() -> dict:
         entry = dict(run["entry"])
         with LOCK:
             frame_id = run["cursor"]
-        months = round((frame_id // 4) * 12 + (frame_id % 4) * 3 + 1.5, 2)
+        months = round((frame_id // 4) * 12 + (frame_id % 4) * 3 + 0.5, 2)
         planned = entry.get("planned_months") or 6
         entry.update({"frame_count": frame_id + 1, "months_done": months,
-                      "year_index": frame_id // 4, "year_no": 1 + frame_id // 4,
+                      "year_index": frame_id // 4, "year_no": frame_id // 4,
                       "planned_years": round(planned / 12.0, 2),
                       "progress": round(min(1.0, months / planned), 4),
                       "last_update": time.time()})

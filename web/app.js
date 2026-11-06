@@ -681,7 +681,8 @@
     if (day < 1) day = 1;
     if (day > 30) day = 30;
     if (month > 12) { month = 12; day = 30; }
-    return t('kv.simDateValue', { y: yearNo || 1, m: month, d: day });
+    var y = (yearNo === null || yearNo === undefined || !isFinite(yearNo)) ? 0 : yearNo;
+    return t('kv.simDateValue', { y: y, m: month, d: day });
   }
 
   function renderProgress(st) {
@@ -695,7 +696,7 @@
     var stepTxt = (run.step === undefined || run.step === null) ? '—'
       : (stepsPerYear ? run.step + ' / ' + Math.round(stepsPerYear) : String(run.step));
     var yearVal = '—';
-    if (run.year_no) {
+    if (run.year_no !== undefined && run.year_no !== null) {
       yearVal = run.year_total ? t('kv.yearValue', { y: run.year_no, total: run.year_total })
         : t('kv.yearSolo', { y: run.year_no });
     }
@@ -907,15 +908,22 @@
     /* 日期一律由结构化字段重建（后端 sim_date 是中文串，英文模式不能直接用） */
     var run = (S.st && S.st.run) || {};
     var spy = run.steps_per_year || (S.st && S.st.params && S.st.params.steps_per_year) || null;
-    var yearNo = entry
-      ? (entry.year_no || (typeof entry.year === 'number' ? entry.year + 1 : null))
-      : (h.year_no || run.year_no || null);
+    var yearNo = null;
+    if (entry) {
+      if (entry.year_no !== undefined && entry.year_no !== null) yearNo = entry.year_no;
+      else if (typeof entry.year === 'number') yearNo = entry.year;
+    }
+    if (yearNo === null) {
+      if (h.year_no !== undefined && h.year_no !== null) yearNo = h.year_no;
+      else if (typeof h.year === 'number') yearNo = h.year;
+      else if (run.year_no !== undefined && run.year_no !== null) yearNo = run.year_no;
+    }
     var simDay = null;
     if (entry && typeof entry.sim_day === 'number') simDay = entry.sim_day;
     if (simDay === null && typeof h.sim_day === 'number') simDay = h.sim_day;
     if (simDay === null && entry && spy && typeof entry.step === 'number') simDay = entry.step / spy * 360;
     if (simDay === null && !entry) simDay = simDayOf(run, S.st);
-    if (yearNo && simDay !== null) bits.push(fmtSimDate(yearNo, simDay));
+    if (yearNo !== null && simDay !== null) bits.push(fmtSimDate(yearNo, simDay));
     else if (lang() === 'zh' && entry && entry.sim_date) bits.push(entry.sim_date);
     els.frameChip.textContent = (S.historyMode ? t('frame.historyPrefix') : '') + bits.join(' · ');
     els.frameChip.className = 'frame-chip' + (S.historyMode ? ' history' : '');
@@ -1316,6 +1324,11 @@
       }
     });
 
+    if (els.globe) {
+      // 悬停读数：指针在球面上移动 → 反投影 + 最近格点
+      els.globe.addEventListener('pointermove', onGlobePointerMove);
+      els.globe.addEventListener('pointerleave', function () { hideHover(true); });
+    }
     if (els.resetView) {
       els.resetView.addEventListener('click', function () { if (globe) globe.resetView(); });
     }
@@ -1638,13 +1651,16 @@
     var layersOk = st && st.layers && LAYER_ORDER.every(function (k) { return !!st.layers[k]; });
     add(layersOk, t('st.layersMeta'), layersOk ? t('st.complete') : t('st.missing'));
 
-    // 用户反馈回归：sit 必须在帧里；年份不能永远是第 0 年；K→°C 换算正确
+    // 用户反馈回归：sit 必须在帧里；年份从 0 开始且日期与年份一致；K→°C 换算正确
     if (st && st.run) {
-      add(st.run.year_no === undefined || st.run.year_no >= 1,
-        t('st.yearOneBased'), String(st.run.year_no));
-      add(!st.run.sim_date || String(st.run.sim_date).indexOf('第 0 年') < 0,
-        t('st.simDateNotYear0'),
-        lang() === 'zh' ? String(st.run.sim_date || '—') : fmtSimDate(st.run.year_no, simDayOf(st.run, st)));
+      var yn = st.run.year_no;
+      add(yn === undefined || yn === null || (typeof yn === 'number' && yn >= 0),
+        t('st.yearZeroBased'), String(yn));
+      var dateText = lang() === 'zh' ? String(st.run.sim_date || '')
+        : fmtSimDate(yn, simDayOf(st.run, st));
+      var yearToken = lang() === 'zh' ? ('第 ' + yn + ' 年') : ('Year ' + yn);
+      add(!!dateText && (yn === undefined || yn === null || dateText.indexOf(yearToken) >= 0),
+        t('st.simDateMatchesYear'), dateText || '—');
     }
     (function () {
       var before = S.unit;
@@ -1682,11 +1698,42 @@
       if (lres.ok) {
         var lfr = parseExof(await lres.arrayBuffer());
         var lsm = lfr.layers[lfr.header.order[0]];
-        landOk = !!lsm;
-        landDetail = lfr.header.nlat + '×' + lfr.header.nlon + ' ' + (lsm ? 'lsm' : t('st.empty'));
+        if (lsm) {
+          var ones = 0;
+          for (var li = 0; li < lsm.length; li++) if (lsm[li] > 0.5) ones++;
+          landOk = ones > 0 && ones < lsm.length;
+          landDetail = lfr.header.nlat + '×' + lfr.header.nlon + ' 陆地格点 ' +
+            (100 * ones / lsm.length).toFixed(1) + '%';
+        }
       }
     } catch (e) { landOk = false; }
     add(landOk, t('st.land'), landDetail);
+
+    // 指针悬停：模拟一次 pointermove，确认浮层真的出现（用户反馈回归）
+    (function () {
+      if (!globe || !S.frame || !els.globe) {
+        add(false, t('st.hoverPointer'), t('st.noData'));
+        return;
+      }
+      var ok = false;
+      var detail = t('st.noData');
+      try {
+        var r = els.globe.getBoundingClientRect();
+        var ev = new PointerEvent('pointermove', {
+          clientX: r.left + r.width * 0.5,
+          clientY: r.top + r.height * 0.5,
+          bubbles: true
+        });
+        els.globe.dispatchEvent(ev);
+        ok = !!(els.hoverCard && !els.hoverCard.hidden && els.hcLat &&
+                els.hcLat.textContent && els.hcLat.textContent !== '—');
+        detail = ok ? (els.hcLat.textContent + ' ' + els.hcLon.textContent) : t('st.noData');
+      } catch (e) {
+        detail = String(e && e.message ? e.message : e);
+      }
+      add(ok, t('st.hoverPointer'), detail);
+      hideHover(true);
+    })();
 
     if (globe) {
       var px = globe.probeCenter();

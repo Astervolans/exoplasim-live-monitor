@@ -67,8 +67,8 @@ pwsh -NoProfile -File ".\monitor\start.ps1"
   大气分压（bar 与 ppmv）、物理滤波、边界文件；以及年/step/进度/ETA 和监控自身开销。
 * **时序与回溯**：`ts_mean` / `ntr` 折线、年度点、历史帧滑块与播放；「回到实时」恢复最新帧。
 * **语言**：中文 / English 切换；`?lang=en` 深链。
-* **自检**：`http://127.0.0.1:8765/?selftest=1`（20 项：API、EXOF、WebGL2、悬停采样、
-  K→°C、i18n、无第三方请求）。
+* **自检**：`http://127.0.0.1:8765/?selftest=1`（21 项：API、EXOF、WebGL2、悬停采样、
+  K→°C、i18n、指针悬停、陆地掩膜、无第三方请求）。
 
 ---
 
@@ -120,10 +120,11 @@ HTTP API（详见 [CONTRACT.md](CONTRACT.md)）：
 | RSS | ≈100 MB（含 pyfft） |
 | 与归档 npz 对照 | 12 帧：`max\|Δts\| = max\|Δpr\| = max\|Δsic\| = max\|Δsit\| = 0`；`--no-physfilter` 时 `Δu=Δv=0` |
 | 只读性 | 开/关监控，归档 npz **104/104 变量逐点相同** |
-| 年份 / 计划 | 6 个月 run：`year_no=1`、`planned_months=6`；20 年 run（`exo.ps1 -Years 20`）：`year_no=1`、`planned_months=240`、`year_total=20`、`restart_year=20`，杀掉进程后仍保持 |
-| 多 run | 两个并发 6 个月算例各自 12 帧；跨会话 run 也能同时监控 |
+| 年份 / 计划 | 6 个月 run：`year_no=0`、`planned_months=6`；20 年 run（`exo.ps1 -Years 20`）：`year_no=0`、`planned_months=240`、`year_total=20`、`restart_year=20`，杀掉进程后仍保持 |
+| 跨年（5 年 / 2h 步长） | 180 帧；年份 0→1→2→3→4，每次过渡都是 `(Y, 12月, 30日) → (Y+1, 1月, 20日)`，不再出现「第 N+1 年 · 第 12 月」的跳变；脚本 `test/watch_crossyear.py` |
+| 多 run | 两个并发 6 个月算例各自 12 帧；跨会话 run 也能同时监控，包括嵌套的 `<root>/<case>/run_round_NNN/` 工作目录 |
 | 独立验收 | `test/verify_api.py` → **ALL CHECKS PASSED** |
-| 前端自检 | 对真实 collector **20/20**（中英文各一次） |
+| 前端自检 | 对真实 collector **21/21**（中英文各一次；含指针悬停、陆地掩膜、i18n、K→°C） |
 
 仓库里还带一套快速迭代工具：
 

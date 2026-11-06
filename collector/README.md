@@ -61,7 +61,8 @@ wsl -d Ubuntu-24.04 -u root -- /opt/exoplasim/env/bin/python \
 | 文件 | 职责 |
 | --- | --- |
 | `rawburn.py` | `plasim_snapshot`（burn7 无格式）增量解析：只读新追加字节、只认完整 record、跟随年末改名、1 帧收尾判定 |
-| `state.py` | 派生场（单位换算/风场/`ntr`）、统一网格重采样、namelist/spec 参数、进度/序列、EXOF 打包 |
+| `state.py` | 派生场（单位换算/风场/
+tr`）、统一网格重采样、namelist/spec 参数、进度/序列、EXOF 打包 |
 | `discovery.py` | 扫描 `/opt/exoplasim/runs/*/plasim_namelist`，判定活跃/已结束 |
 | `server.py` | HTTP + 多 run 轮询主循环 + 进程自检（`/proc/self/stat`） |
 
@@ -101,10 +102,14 @@ run:       monitor/test/run_short.py --spec .../pleiroma_continue.json \
 | 数值对照 | 与 `pleiroma_snapshot.npz` 12 帧逐帧：`max|Δts|=max|Δpr|=max|Δsic|=max|Δu|=max|Δv|=0` |
 | 官方验收 | `monitor/test/verify_api.py ... --no-physfilter-expected` → **ALL CHECKS PASSED** |
 | 多 run | 两个并发短跑同时 `running`，各自 12 帧、`?run=` 取到各自 workdir；另有一个 1 个月 run 被实时解析出 3 帧 |
+| 嵌套 run | 扫描 `<runs-root>/<case>/<round>/` 第二层，`run_id=parent__child`；实测发现 `pl_s1/run_round_002`（同时多个 round） |
+| 跨年（5 年 / 2h） | `test/watch_crossyear.py`：180 帧，年份 0→4，过渡 `(Y,12,30)→(Y+1,1,20)`，无「第 N+1 年 12 月」；末帧 `第 4 年 · 第 12 月 · 30 天`（`months_done=60`） |
+| 年份 / 日期 | 6 个月 run：`year_no=0`、`第 0 年 · 第 6 月 · 30 天`；年份从 0 开始（契约 v2） |
 
 数值对照细节：`u/v` 用 `PLARAD_m = 7964025 m`（= 1.25 R⊕ × 6371220）作 `rdcostheta`
 分子、`physfilter=False`，取最底层 `[-1]`，与 pyburn 归档逐点一致（误差 0）。
-`pr = (code142+code143) × 8.64e7` mm/day；`ntr = 178+179`；`spd = hypot(u,v)`。
+`pr = (code142+code143) × 8.64e7` mm/day；
+tr = 178+179`；`spd = hypot(u,v)`。
 
 验收辅助脚本（只走 HTTP，不 import collector）：`_assert_frames.py <base> <run_id> <frames>`
 断言 `frames_total`、step 严格递增无重复、每帧 EXOF 可解析且 step 对齐；
@@ -115,7 +120,8 @@ run:       monitor/test/run_short.py --spec .../pleiroma_continue.json \
 1. **风场依赖 `--no-physfilter` 才能与归档 npz 精确对齐**：pyburn 归档默认
    `physfilter=False`，所以做数值对照时 collector 也要关滤波；正式出图默认开滤波
    （两者差别是谱域截断，视觉上很小，但数值上会差几 m/s）。
-2. `params.ncpus` 对**已结束**的 run 通常是 `null`——进程数不写进 namelist；
+2. `params.ncpus` 对**已结束**的 run 通常是 
+ull`——进程数不写进 namelist；
    运行中的 run 从 `/proc/<pid>/cmdline` 的 `most_plasim_*_p<N>.x` 推断（实测得到 8）。
    短跑 harness 的 workdir 里 `most_plasim_run` 是 `compile.sh` 通用模板（t42_p1），不可信。
 3. `planned_months` 对 harness 截短的「年」按 `N_RUN_STEPS/每步每月` 折算

@@ -155,7 +155,7 @@ Either attach to a run you already started, or create a 6-month test case
 `run_short.py` keeps the physics identical and only shortens the integration interval.
 For a real run use the project's normal entry point (e.g. `exo.ps1 run`).
 
-The collector auto-discovers any `/opt/exoplasim/runs/*/plasim_namelist` within
+The collector auto-discovers any `/opt/exoplasim/runs/**/plasim_namelist` (top level and one nested level, e.g. `<case>/run_round_002/`) within
 `--recent-minutes` (default 120) and lists it in the run selector.
 
 ---

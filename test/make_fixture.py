@@ -259,11 +259,11 @@ def main(argv=None) -> int:
         "run": {
             "run_id": run_id, "modelname": params["modelname"], "workdir": "/opt/exoplasim/runs/" + run_id,
             "outdir": None, "status": "running", "status_text": "运行中（fixture 回放）",
-            "wall_elapsed_s": 35.0, "year_index": 0, "year_no": 1,
+            "wall_elapsed_s": 35.0, "year_index": 0, "year_no": 0,
             "year_total": 20, "planned_years": 20, "restart_year": 20, "run_mode": "years",
             "frames_total": nframes,
             "planned_months": 240, "months_done": 1.5, "progress": 0.00625,
-            "eta_s": 25.0, "sim_day": 45.0, "sim_date": "第 1 年 · 第 2 月 · 第 15 天",
+            "eta_s": 25.0, "sim_day": 45.0, "sim_date": "第 0 年 · 第 2 月 · 第 15 天",
             "step": 719, "steps_per_year": int(steps_per_year), "msg": None,
         },
         "grid": grid, "layers": layers,
@@ -316,7 +316,7 @@ def main(argv=None) -> int:
     state_b["run"]["planned_months"] = 36
     state_b["run"]["planned_years"] = 3
     state_b["run"]["year_total"] = 3
-    state_b["run"]["year_no"] = 1
+    state_b["run"]["year_no"] = 0
     state_b["run"]["progress"] = 0.04
     state_b["run"]["status_text"] = "运行中（fixture 回放 B）"
     state_b["params"]["modelname"] = "pleiroma_b"
@@ -335,7 +335,7 @@ def main(argv=None) -> int:
         "runs": [
             {"run_id": run_id, "modelname": params["modelname"], "status": "running",
              "workdir": "/opt/exoplasim/runs/" + run_id, "frame_count": nframes,
-             "year_index": 0, "year_no": 1, "year_total": 20, "months_done": round(nframes * 0.5, 1),
+             "year_index": 0, "year_no": 0, "year_total": 20, "months_done": round(nframes * 0.5, 1),
              "planned_months": 240, "planned_years": 20,
              "progress": round(min(1.0, nframes * 0.5 / 240), 4),
              "wall_elapsed_s": 35.0, "last_update": 0,
@@ -343,7 +343,7 @@ def main(argv=None) -> int:
                          "ncpus": params["ncpus"], "flux_W_m2": params["flux_W_m2"]}},
             {"run_id": "20260101-000000_pleiroma_b", "modelname": "pleiroma_b", "status": "running",
              "workdir": "/opt/exoplasim/runs/20260101-000000_pleiroma_b", "frame_count": n_b,
-             "year_index": 0, "year_no": 1, "year_total": 3, "months_done": 1.5, "planned_months": 36,
+             "year_index": 0, "year_no": 0, "year_total": 3, "months_done": 1.5, "planned_months": 36,
              "planned_years": 3, "progress": 0.04, "wall_elapsed_s": 30.0, "last_update": 0,
              "summary": {"resolution": "T21", "layers": 10, "ncpus": 16, "flux_W_m2": 1200.0}},
         ],

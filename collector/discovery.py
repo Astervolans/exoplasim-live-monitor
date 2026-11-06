@@ -71,6 +71,17 @@ def scan_runs(root=DEFAULT_RUNS_ROOT, recent_minutes=DEFAULT_RECENT_MINUTES,
     except OSError:
         return found
 
+    def consider(workdir, run_id, nested=False):
+        if workdir in seen:
+            return
+        entry = _inspect(workdir, now, run_id=run_id)
+        if entry is None:
+            return
+        if entry.has_raw or (entry.age_min is not None
+                             and entry.age_min <= recent_minutes):
+            found.append(entry)
+            seen.add(entry.run_id)
+
     for name in names:
         if name.startswith("_"):
             # exo 的临时目录（_stage_* / _restarts / _monitor_artifacts）不是运行目录
@@ -82,13 +93,23 @@ def scan_runs(root=DEFAULT_RUNS_ROOT, recent_minutes=DEFAULT_RECENT_MINUTES,
         workdir = os.path.join(root, name)
         if workdir in seen:
             continue
-        entry = _inspect(workdir, now)
-        if entry is None:
+        consider(workdir, name)
+        # 第二层：一些驱动脚本把每个 round 放在 <root>/<case>/run_round_NNN/ 下，
+        # 真正的工作目录（含 plasim_namelist）在下一层，必须递归发现。
+        try:
+            children = sorted(os.listdir(workdir))
+        except OSError:
             continue
-        if entry.has_raw or (entry.age_min is not None
-                             and entry.age_min <= recent_minutes):
-            found.append(entry)
-            seen.add(entry.run_id)
+        for child in children:
+            if child.startswith("_") or child.endswith("_crashed"):
+                continue
+            sub = os.path.join(workdir, child)
+            try:
+                if not os.path.isdir(sub):
+                    continue
+            except OSError:
+                continue
+            consider(sub, "%s__%s" % (name, child), nested=True)
 
     found.sort(key=lambda item: (not item.has_raw, -(item.mtime or 0)))
     if max_runs and len(found) > max_runs:
@@ -99,7 +120,7 @@ def scan_runs(root=DEFAULT_RUNS_ROOT, recent_minutes=DEFAULT_RECENT_MINUTES,
     return found
 
 
-def _inspect(workdir, now):
+def _inspect(workdir, now, run_id=None):
     try:
         st = os.stat(workdir)
     except OSError:
@@ -144,7 +165,7 @@ def _inspect(workdir, now):
 
     mtime = max(st.st_mtime, _safe_mtime(namelist))
     return RunDir(
-        run_id=os.path.basename(workdir.rstrip("/")),
+        run_id=run_id or os.path.basename(workdir.rstrip("/")),
         workdir=workdir,
         mtime=mtime,
         ctime=st.st_ctime,
@@ -420,8 +441,10 @@ def infer_run_plan(workdir, run_id=None, spec=None):
         joined = " ".join(argv)
         is_short = "run_short" in joined
         is_exo = "exo_run" in joined
+        short_id = run_id.split("__")[-1] if run_id else ""
         matched = (target is not None and cwd == target) or (
-            is_exo and run_id and run_id in joined)
+            is_exo and ((run_id and run_id in joined)
+                        or (short_id and short_id in joined)))
         if not matched:
             continue
         apply_proc_plan(plan, argv, seen_paths)

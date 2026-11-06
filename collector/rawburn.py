@@ -227,18 +227,16 @@ class BurnStream:
                     self._log("follow rename -> %s" % cand)
                     self.path = cand
                     return cand
-        # 否则挑第一个存在的（通常是下一年新建的 plasim_snapshot）
+        # 否则挑第一个存在的（通常是下一年新建的 plasim_snapshot）。
+        # 注意：这里**只返回路径**，不要提前改 self.path/src_key/offset——
+        # 交给 poll() 的 open/replaced 分支处理，否则第一次打开（以及跨年后新文件）
+        # 不会产生任何事件，collector 的年份计数就永远停在初始值。
         for cand in candidates:
             try:
                 st = os.stat(cand)
             except OSError:
                 continue
             if st.st_size > 0:
-                self.path = cand
-                self.src_key = (st.st_dev, st.st_ino)
-                self.offset = 0
-                self._pending = None
-                self._done_step = None
                 return cand
         return None
 

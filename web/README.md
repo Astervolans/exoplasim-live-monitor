@@ -10,7 +10,7 @@ python monitor/test/mock_server.py --port 8790
 # 浏览器打开 http://127.0.0.1:8790/
 ```
 
-自检：`http://127.0.0.1:8790/?selftest=1`（当前 20 项，含 2 项语言相关检查）。
+自检：`http://127.0.0.1:8790/?selftest=1`（当前 21 项，含 2 项语言检查 + 指针悬停 + 陆地掩膜）。
 
 ## Languages / 语言
 
