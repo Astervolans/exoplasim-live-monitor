@@ -763,3 +763,97 @@ main {
 .hover-card .hg-v { color: var(--text); text-align: right; white-space: nowrap; }
 .hover-card .hg-row.cur .hg-k,
 .hover-card .hg-row.cur .hg-v { color: #9fd0ff; }
+
+/* ---------------- 手机 / 触屏（竖屏优先，兼顾横屏） ---------------- */
+.hint-touch { display: none; }
+
+@media (max-width: 900px) {
+  html, body { height: auto; min-height: 100%; overflow: auto; }
+  body { min-height: 100dvh; }
+  #topbar {
+    height: auto;
+    min-height: var(--top-h);
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    gap: 6px 8px;
+    white-space: normal;
+  }
+  #topbar .brand-text em { display: none; }
+  #topbar .spacer { display: none; }
+  #topbar .picker { order: 10; flex: 1 1 100%; }
+  .picker-btn { max-width: none; width: 100%; }
+  .conn, .badge, .fresh, .server { font-size: 10.5px; }
+
+  main { flex-direction: column; min-height: 0; }
+  .stage { flex: 0 0 auto; height: 54vh; height: 54dvh; min-height: 280px; }
+  .globe-wrap { border-radius: 0 0 12px 12px; }
+  .side {
+    flex: 1 1 auto;
+    width: 100%;
+    padding: 8px 10px calc(14px + env(safe-area-inset-bottom));
+    overflow: visible;
+    gap: 8px;
+  }
+  .card { padding: 8px 10px; }
+  .layer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .layer-btn { min-height: 46px; padding: 7px 9px; }
+  .chip { min-height: 36px; padding: 0 10px; }
+  .ghost-btn, .icon-btn { min-height: 38px; }
+  .timeline { height: 48px; }
+  .hud-hint, .hint-desktop { display: none; }
+  .hint-touch { display: inline; }
+  .hud-tl { top: 8px; left: 10px; right: 118px; }
+  .layer-name { font-size: 15px; }
+  .layer-meta { font-size: 10.5px; }
+  .hud-tr { top: 8px; right: 10px; max-width: 46%; }
+  .frame-chip { font-size: 10px; max-width: 100%; }
+  .run-info { display: none; }
+  .hud-bl { left: 10px; bottom: 10px; gap: 5px; max-width: calc(100% - 20px); }
+  .hud-br { display: none; }
+  .hover-card { max-width: min(270px, 82vw); font-size: 11px; }
+  .card-chart { flex: 0 0 158px; }
+  .card-params { flex: 0 0 auto; min-height: 0; }
+  .params-body { max-height: 40dvh; overflow: auto; }
+  .selftest { left: 8px; right: 8px; top: 56px; width: auto; max-height: 80dvh; }
+  .msg-banner { font-size: 11.5px; }
+}
+
+/* 手机横屏：左右分栏，避免球体被压得太扁 */
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 560px) {
+  html, body { height: 100%; overflow: hidden; }
+  main { flex-direction: row; height: calc(100dvh - var(--top-h)); }
+  .stage { height: auto; min-height: 0; flex: 1 1 auto; }
+  .side { flex: 0 0 44vw; height: 100%; overflow-y: auto; }
+  #topbar .picker { order: 0; flex: 1 1 auto; }
+  .hud-tl { right: 84px; }
+  .hud-hint { display: none; }
+  .hint-touch { display: none; }
+}
+
+@media (pointer: coarse) {
+  .hint-desktop { display: none; }
+  .hint-touch { display: inline; }
+  .layer-btn { min-height: 46px; }
+}
+/* 窄屏进一步收紧顶栏/时间轴，避免右侧被裁切 */
+@media (max-width: 900px) {
+  #topbar .server { display: none; }
+  .brand-text b { font-size: 12.5px; }
+  .hud-bl .chip { font-size: 11px; }
+}
+@media (max-width: 520px) {
+  #topbar .fresh { display: none; }
+  .hud-tr { display: none; }
+  .tl-label { display: none; }
+  .brand-mark { font-size: 15px; }
+}
+
+@media (pointer: coarse) {
+  .hud-bl .chip { min-height: 40px; }
+  .timeline .icon-btn, .timeline .ghost-btn { min-height: 40px; }
+}
+@media (max-width: 900px) {
+  .timeline { padding: 0 10px; gap: 8px; }
+  .timeline .icon-btn, .timeline .ghost-btn { flex: 0 0 auto; }
+  .timeline input[type="range"] { flex: 1 1 40px; min-width: 40px; }
+}

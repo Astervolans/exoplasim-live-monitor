@@ -6,12 +6,14 @@
     pwsh -NoProfile -File ".\monitor\start.ps1" -Workdir /opt/exoplasim/runs/2026xxxx_pleiroma
     pwsh -NoProfile -File ".\monitor\start.ps1" -Port 8770 -NoBrowser
     pwsh -NoProfile -File ".\monitor\start.ps1" -Stop
+    pwsh -NoProfile -File ".\monitor\start.ps1" -Lan              # 同时开放给局域网/手机热点（需管理员）
+    pwsh -NoProfile -File ".\monitor\start.ps1" -LanRemove        # 撤销端口代理与防火墙规则
 
   说明：
   - collector 跑在 WSL2 里（要读 /opt/exoplasim/runs 的 ext4 文件），只读、不碰模拟进程。
   - Windows 浏览器通过 127.0.0.1:<Port> 访问（WSL2 localhost 转发）。
   - 实际启动逻辑在 monitor/launch_collector.sh（setsid 脱离会话，避免脚本退出时误杀）。
-  - 日志：monitor\collector.log（= WSL /tmp/monitor_collector.log 的副本）
+  - 日志：monitor\collector.log（= WSL /opt/exoplasim/logs/monitor_collector.log 的副本）
 #>
 [CmdletBinding()]
 param(
@@ -20,7 +22,10 @@ param(
     [string]$Outdir = "",
     [switch]$NoBrowser,
     [switch]$Stop,
-    [switch]$Foreground
+    [switch]$Foreground,
+    [switch]$Lan,
+    [switch]$LanRemove,
+    [string]$ListenIp = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +46,24 @@ function ConvertTo-WslPath {
     return $p
 }
 
+function Invoke-LanSetup {
+    param([switch]$Remove)
+    $helper = Join-Path $Here 'expose_lan.ps1'
+    $argLine = "-NoProfile -ExecutionPolicy Bypass -File `"$helper`" -Port $Port"
+    if ($ListenIp) { $argLine += " -ListenIp $ListenIp" }
+    if ($Remove) { $argLine += " -Remove" }
+    Write-Host "[monitor] 配置 LAN 访问（需要管理员，可能出现 UAC 提示）..."
+    $p = Start-Process -FilePath 'pwsh.exe' -Verb RunAs -ArgumentList $argLine -Wait -PassThru
+    if ($p.ExitCode -ne 0) {
+        Write-Warning "[monitor] LAN 配置失败（exit $($p.ExitCode)）；可手动运行: $helper"
+        return
+    }
+    $log = Join-Path $Here 'expose_lan.log'
+    if (Test-Path $log) {
+        Get-Content $log | Where-Object { $_ -match 'http://|listen IP|端口代理' } | ForEach-Object { Write-Host "           $_" }
+    }
+}
+
 function Test-Monitor {
     try {
         $resp = Invoke-WebRequest -Uri ($Url + 'api/runs') -UseBasicParsing -TimeoutSec 2
@@ -59,6 +82,8 @@ if ($Stop) {
 # 已在运行：直接打开界面
 if (Test-Monitor) {
     Write-Host "[monitor] 已有 collector 在 $Url"
+    if ($LanRemove) { Invoke-LanSetup -Remove }
+    elseif ($Lan) { Invoke-LanSetup }
     if (-not $NoBrowser) { Start-Process $Url }
     exit 0
 }
@@ -122,6 +147,9 @@ try {
 } catch {
     Write-Host "[monitor] OK（状态读取失败：$($_.Exception.Message)）"
 }
+
+if ($LanRemove) { Invoke-LanSetup -Remove }
+elseif ($Lan) { Invoke-LanSetup }
 
 if (-not $NoBrowser) {
     Start-Process $Url

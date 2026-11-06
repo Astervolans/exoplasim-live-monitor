@@ -15,6 +15,8 @@ without touching the model process.
 * **Multi-run** — several simulations can run at once; the top-bar selector switches
   between them (`?run=<run_id>` deep link).
 * **Bilingual UI** — 中文 / English toggle (`?lang=en`).
+* **PC + phone** — responsive layout for desktop and portrait/landscape phones; touch
+  drag, pinch zoom and tap-to-read; works over the local network / hotspot.
 * **Zero dependencies** — hand-written WebGL2 globe; no npm, no CDN, no three.js.
 
 ![Live monitor — real T21 run, 0-based year, land mask and hover readout](web/_preview/real_land_hover.png)
@@ -43,6 +45,31 @@ Then open <http://127.0.0.1:8765/>. `start.ps1` auto-discovers runs under
 | `-NoBrowser` | do not open a browser |
 | `-Foreground` | run the collector in the current console |
 | `-Stop` | stop the collector |
+| `-Lan` | also expose the page to the LAN / phone hotspot (admin; adds a port proxy + firewall rule) |
+| `-LanRemove` | remove the LAN port proxy and firewall rule |
+| `-ListenIp 192.168.137.1` | override the LAN listen address for `-Lan` |
+
+### Phone / LAN access
+
+The collector runs inside WSL2, so `127.0.0.1:8765` only exists on Windows. To watch from a
+phone or another machine on the same network:
+
+```powershell
+pwsh -NoProfile -File ".\monitor\start.ps1" -Lan
+```
+
+`start.ps1` starts the collector and then runs `monitor/expose_lan.ps1` elevated, which adds
+a Windows port proxy (`<LAN IP>:8765 → <WSL IP>:8765`) and a `LocalSubnet` firewall rule.
+It prints the URL, for example:
+
+```
+[lan] 局域网/手机访问： http://192.168.137.1:8765/
+```
+
+Use that address on the phone (connect it to the computer's mobile hotspot or the same LAN).
+WSL2's IP changes after `wsl --shutdown`, so re-run `start.ps1 -Lan` (or `expose_lan.ps1`)
+after a WSL restart. `-LanRemove` cleans up. The script only exposes the collector port; the
+monitor itself stays read-only.
 
 No simulation yet? Create a 6-month test case (≈40 s on 8 cores):
 
@@ -69,7 +96,11 @@ project's `preset/specs/pleiroma.json` plus a restart file works). See
   `tas` (K).
 * **Hover readout** — move the pointer over the globe: reprojected latitude/longitude and
   the nearest-grid-cell value of the current layer plus `ts/tas/spd/sic/sit/clt`;
-  pin a point with `?hover=<lat>,<lon>`.
+  pin a point with `?hover=<lat>,<lon>`. On touch screens, **tap** the globe to show the
+  same card (tap elsewhere to dismiss).
+* **Touch controls** — drag to rotate, **pinch to zoom**, `+ / −` buttons, double-tap/双击复位;
+  layout stacks the globe above the panels in portrait and uses a side-by-side layout in
+  landscape. Safe-area insets are respected on notched phones.
 * **Temperature units** — `K / °C` toggle (persisted, `?unit=c`); affects the colour-bar
   ticks, layer title and hover values.
 * **Run selector** — all discovered runs with status/frame count, remembered in
@@ -81,8 +112,18 @@ project's `preset/specs/pleiroma.json` plus a restart file works). See
 * **Timeline** — `ts_mean` and `ntr` series, yearly points, history slider and playback;
   "back to live" returns to the newest frame.
 * **Language** — 中文 / English switch; `?lang=en` deep link.
-* **Self-test** — `http://127.0.0.1:8765/?selftest=1` (21 checks: API, EXOF parsing,
-  WebGL2 render, hover sampling, K→°C, i18n, pointer hover, land mask, no third-party requests).
+* **Self-test** — `http://127.0.0.1:8765/?selftest=1` (23 checks: API, EXOF parsing,
+  WebGL2 render, hover sampling, touch tap, K→°C, i18n, pointer events, land mask,
+  no horizontal overflow, no third-party requests).
+
+Phone screenshots (iPhone-14 viewport, 390×844):
+
+![Phone portrait](web/_preview/mobile_390x844.png)
+![Tap readout on phone](web/_preview/mobile_tap_390x844.png)
+
+Landscape phone (844×390):
+
+![Phone landscape](web/_preview/mobile_844x390.png)
 
 ---
 
@@ -139,7 +180,9 @@ HTTP API (see [CONTRACT.md](CONTRACT.md)):
 | Cross-year (5 years, 2 h timestep) | 180 frames; year sequence 0→1→2→3→4 with each transition `(Y, 12, 30) → (Y+1, 1, 20)`; no `第 N+1 年 · 第 12 月` jump. Script: `test/watch_crossyear.py` |
 | Multi-run | two concurrent 6-month runs both live, each with 12 frames; cross-session runs are listed too, including nested `<root>/<case>/run_round_NNN/` workdirs |
 | API verifier | `test/verify_api.py` → **ALL CHECKS PASSED** |
-| Frontend self-test | **21/21** against the real collector (zh and en; includes pointer hover, land mask, i18n, K→°C) |
+| Frontend self-test | **23/23** against the real collector (zh and en; includes pointer hover, touch tap, land mask, no horizontal overflow, i18n, K→°C) |
+| Phone layout | iPhone-14 emulation 390×844 + landscape 844×390: no horizontal overflow, tap readout, pinch/zoom buttons; screenshots above |
+| LAN access | `start.ps1 -Lan` → port proxy + `LocalSubnet` firewall rule; `http://192.168.137.1:8765/` returns 200 from the host; `-LanRemove` cleans up |
 
 This repository also keeps a small harness for fast iteration:
 
@@ -157,6 +200,7 @@ This repository also keeps a small harness for fast iteration:
 ```
 monitor/
 ├── start.ps1 / launch_collector.sh   Windows launcher + WSL foreground launcher
+├── expose_lan.ps1                    optional LAN/phone port proxy + firewall (admin)
 ├── start.sh                          manual WSL start
 ├── CONTRACT.md                       API/format contract (Chinese; code comments in English)
 ├── README.md / README.zh-CN.md       this file, in English / Chinese

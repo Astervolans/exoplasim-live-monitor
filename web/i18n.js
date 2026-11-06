@@ -201,6 +201,9 @@
       'opt.arrows': '风矢',
       'opt.resetView': '复位视角',
       'hint.globe': '拖拽旋转 · 滚轮缩放 · 双击复位',
+      'hint.touch': '拖动旋转 · 双指缩放 · 点按读数',
+      'ui.zoomIn': '放大',
+      'ui.zoomOut': '缩小',
 
       /* 加载 / 降级 */
       'loading.connecting': '正在连接监控服务…',
@@ -240,6 +243,8 @@
       'st.tempConv': 'K→°C 换算正确',
       'st.hover': '悬停采样（0°,0°）',
   'st.hoverPointer': '悬停浮层（指针事件）',
+  'st.touchReadout': '触摸点按读数',
+  'st.noOverflow': '移动端无横向溢出',
       'st.noData': '无数据',
       'st.exof': '/api/frame EXOF 解析',
       'st.sitInFrame': '帧含 sit（海冰厚度）图层',
@@ -425,6 +430,9 @@
       'opt.arrows': 'Wind arrows',
       'opt.resetView': 'Reset view',
       'hint.globe': 'Drag to rotate · wheel to zoom · double-click to reset',
+      'hint.touch': 'Drag to rotate · pinch to zoom · tap to read',
+      'ui.zoomIn': 'Zoom in',
+      'ui.zoomOut': 'Zoom out',
 
       'loading.connecting': 'Connecting to monitor service…',
       'gl.title': 'WebGL2 unavailable',
@@ -460,6 +468,8 @@
       'st.tempConv': 'K→°C conversion correct',
       'st.hover': 'Hover sampling (0°,0°)',
   'st.hoverPointer': 'Hover card (pointer events)',
+  'st.touchReadout': 'Tap readout (touch)',
+  'st.noOverflow': 'No horizontal overflow',
       'st.noData': 'no data',
       'st.exof': '/api/frame EXOF parse',
       'st.sitInFrame': 'Frame contains sit (sea-ice thickness)',

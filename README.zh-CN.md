@@ -12,6 +12,7 @@
   轮询约 2 ms，RSS ≈100 MB。
 * **多模拟**：可同时监控多个 run，顶栏切换（`?run=<run_id>` 深链）。
 * **中英双语**：中文 / English 切换（`?lang=en`）。
+* **PC + 手机**：桌面端与手机竖屏/横屏自适应；触控拖动、双指缩放、点按读数；支持局域网 / 热点访问。
 * **零依赖**：手写 WebGL2 球体，不需要 npm / CDN / three.js。
 
 ![实时监控——真实 T21 算例、年份从 0 开始、陆地掩膜与悬停读数](web/_preview/real_land_hover.png)
@@ -40,6 +41,27 @@ pwsh -NoProfile -File ".\monitor\start.ps1"
 | `-NoBrowser` | 不开浏览器 |
 | `-Foreground` | 前台运行（调试） |
 | `-Stop` | 停止 collector |
+| `-Lan` | 同时开放给局域网 / 手机热点（管理员；自动加端口代理与防火墙规则） |
+| `-LanRemove` | 撤销局域网端口代理与防火墙规则 |
+| `-ListenIp 192.168.137.1` | 指定 `-Lan` 的监听地址 |
+
+### 手机 / 局域网访问
+
+collector 跑在 WSL2 里，`127.0.0.1:8765` 只存在于 Windows。手机或局域网其他机器要看页面：
+
+```powershell
+pwsh -NoProfile -File ".\monitor\start.ps1" -Lan
+```
+
+`start.ps1` 会启动 collector，并以管理员身份调用 `monitor/expose_lan.ps1`，添加 Windows 端口代理
+（`<局域网 IP>:8765 → <WSL IP>:8765`）和 `LocalSubnet` 防火墙规则，然后打印地址，例如：
+
+```
+[lan] 局域网/手机访问： http://192.168.137.1:8765/
+```
+
+手机连接电脑热点（或同一局域网）后打开该地址。WSL2 的 IP 在 `wsl --shutdown` 后会变化，重启 WSL 后
+重新运行 `start.ps1 -Lan` 即可；`-LanRemove` 清理规则。该脚本只暴露 collector 端口，监控本身仍是只读的。
 
 还没有模拟？先跑一个 **6 个模拟月** 的测试算例（8 进程约 40 s）：
 
@@ -59,7 +81,8 @@ pwsh -NoProfile -File ".\monitor\start.ps1"
   光照 / 经纬网 / 陆地描边可独立开关。**只使用模型系**（自转轴为极），监控器聚焦模拟本身。
 * **图层**：地表温度 `ts`(K)、降水 `pr`(mm/d)、风速 `spd`(m/s)+风矢、海冰覆盖 `sic`(0–1)、
   **海冰厚度 `sit`(m, 0–9)**、云量 `clt`(0–1，按 % 显示)、2m 气温 `tas`(K)。
-* **悬停读数**：鼠标指到球面 → 显示该点经纬度、当前图层值，以及 `ts/tas/spd/sic/sit/clt`
+* **悬停读数**：鼠标指到球面 → 显示该点经纬度、当前图层值，以及 `ts/tas/spd/sic/sit/clt`；触屏上**点按**球面显示同一浮层（点别处关闭）。
+* **触控**：拖动旋转、**双指缩放**、`+ / −` 按钮、双击复位；竖屏时球体在上、面板在下，横屏时左右分栏，并适配刘海屏安全区。
   的最近格点值；`?hover=<lat>,<lon>` 可固定一点。
 * **温度单位**：`K / °C` 切换（记忆 + `?unit=c`），影响色标刻度、标题和悬停值。
 * **多模拟选择器**：列出所有发现的 run（状态/帧数），localStorage 记忆；`?run=` 深链。
@@ -67,8 +90,17 @@ pwsh -NoProfile -File ".\monitor\start.ps1"
   大气分压（bar 与 ppmv）、物理滤波、边界文件；以及年/step/进度/ETA 和监控自身开销。
 * **时序与回溯**：`ts_mean` / `ntr` 折线、年度点、历史帧滑块与播放；「回到实时」恢复最新帧。
 * **语言**：中文 / English 切换；`?lang=en` 深链。
-* **自检**：`http://127.0.0.1:8765/?selftest=1`（21 项：API、EXOF、WebGL2、悬停采样、
-  K→°C、i18n、指针悬停、陆地掩膜、无第三方请求）。
+* **自检**：`http://127.0.0.1:8765/?selftest=1`（23 项：API、EXOF、WebGL2、悬停采样、
+  K→°C、i18n、指针悬停、触摸点按、陆地掩膜、无横向溢出、无第三方请求）。
+
+手机截图（iPhone-14 视口 390×844）：
+
+![手机竖屏](web/_preview/mobile_390x844.png)
+![手机点按读数](web/_preview/mobile_tap_390x844.png)
+
+手机横屏（844×390）：
+
+![手机横屏](web/_preview/mobile_844x390.png)
 
 ---
 
@@ -124,7 +156,9 @@ HTTP API（详见 [CONTRACT.md](CONTRACT.md)）：
 | 跨年（5 年 / 2h 步长） | 180 帧；年份 0→1→2→3→4，每次过渡都是 `(Y, 12月, 30日) → (Y+1, 1月, 20日)`，不再出现「第 N+1 年 · 第 12 月」的跳变；脚本 `test/watch_crossyear.py` |
 | 多 run | 两个并发 6 个月算例各自 12 帧；跨会话 run 也能同时监控，包括嵌套的 `<root>/<case>/run_round_NNN/` 工作目录 |
 | 独立验收 | `test/verify_api.py` → **ALL CHECKS PASSED** |
-| 前端自检 | 对真实 collector **21/21**（中英文各一次；含指针悬停、陆地掩膜、i18n、K→°C） |
+| 前端自检 | 对真实 collector **23/23**（中英文各一次；含指针悬停、触摸点按、陆地掩膜、无横向溢出、i18n、K→°C） |
+| 手机布局 | iPhone-14 模拟 390×844 + 横屏 844×390：无横向溢出、点按读数、双指缩放/按钮；见上方截图 |
+| 局域网 | `start.ps1 -Lan` → 端口代理 + `LocalSubnet` 防火墙；`http://192.168.137.1:8765/` 从主机访问返回 200；`-LanRemove` 可清理 |
 
 仓库里还带一套快速迭代工具：
 
@@ -142,6 +176,7 @@ HTTP API（详见 [CONTRACT.md](CONTRACT.md)）：
 ```
 monitor/
 ├── start.ps1 / launch_collector.sh   Windows 启动器 + WSL 前台启动脚本
+├── expose_lan.ps1                    可选的局域网/手机端口代理 + 防火墙（需管理员）
 ├── start.sh                          手工在 WSL 内启动
 ├── CONTRACT.md                       接口/格式契约（中文；代码注释为英文）
 ├── README.md / README.zh-CN.md       英/中说明

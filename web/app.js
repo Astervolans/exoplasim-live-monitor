@@ -112,6 +112,7 @@
     hover: null,          // 当前悬停采样 {lat,lon,model,idx,vals,col,row}
     hoverScreen: null,    // 屏幕坐标（CSS px，画布内）
     pinned: null,         // ?hover=<lat>,<lon> 固定浮层（显示系经纬度）
+    lastPointerType: 'mouse',
     historyMode: false, cursor: null, playing: false, playTimer: null,
     pickerOpen: false,
     stateBusy: false, runsBusy: false,
@@ -306,6 +307,7 @@
       runInfo: $('runInfo'), runIdText: $('runIdText'), copyRun: $('copyRun'),
       slider: $('frameSlider'), playBtn: $('playBtn'), tlLabel: $('tlLabel'), liveBtn: $('liveBtn'),
       selftest: $('selftest'), resetView: $('resetView'),
+      zoomIn: $('zoomIn'), zoomOut: $('zoomOut'),
       hoverCard: $('hoverCard'), hcLat: $('hcLat'), hcLon: $('hcLon'),
       hcLayerName: $('hcLayerName'), hcLayerVal: $('hcLayerVal'), hcGrid: $('hcGrid'),
       unitSeg: $('unitSeg'), langSeg: $('langSeg')
@@ -1325,9 +1327,44 @@
     });
 
     if (els.globe) {
-      // 悬停读数：指针在球面上移动 → 反投影 + 最近格点
-      els.globe.addEventListener('pointermove', onGlobePointerMove);
-      els.globe.addEventListener('pointerleave', function () { hideHover(true); });
+      var tapStart = null;
+      els.globe.addEventListener('pointerdown', function (e) {
+        S.lastPointerType = e.pointerType || 'mouse';
+        if (e.pointerType === 'touch') tapStart = { x: e.clientX, y: e.clientY, t: Date.now() };
+      });
+      els.globe.addEventListener('pointermove', function (e) {
+        S.lastPointerType = e.pointerType || 'mouse';
+        onGlobePointerMove(e);
+      });
+      els.globe.addEventListener('pointerup', function (e) {
+        if (e.pointerType !== 'touch' || !tapStart) return;
+        var moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y);
+        var isTap = moved < 12 && (Date.now() - tapStart.t) < 600;
+        tapStart = null;
+        if (!isTap || !globe) return;
+        var rect = els.globe.getBoundingClientRect();
+        var x = e.clientX - rect.left, y = e.clientY - rect.top;
+        var hit = globe.pick(x, y);
+        if (!hit) { hideHover(true); return; }
+        var ll = globe.latLonOf(hit.world);
+        hoverAtLatLon(ll.lat, ll.lon, { x: x, y: y });
+      });
+      els.globe.addEventListener('pointerleave', function (e) {
+        S.lastPointerType = (e && e.pointerType) || S.lastPointerType;
+        if (S.lastPointerType !== 'touch') hideHover(true);
+      });
+      document.addEventListener('pointerdown', function (e) {
+        if (e.pointerType !== 'touch') return;
+        if (e.target === els.globe) return;
+        if (els.hoverCard && els.hoverCard.contains(e.target)) return;
+        hideHover(true);
+      });
+    }
+    if (els.zoomIn) {
+      els.zoomIn.addEventListener('click', function () { if (globe) globe.zoomBy(1.25); });
+    }
+    if (els.zoomOut) {
+      els.zoomOut.addEventListener('click', function () { if (globe) globe.zoomBy(0.8); });
     }
     if (els.resetView) {
       els.resetView.addEventListener('click', function () { if (globe) globe.resetView(); });
@@ -1718,6 +1755,8 @@
       var ok = false;
       var detail = t('st.noData');
       try {
+        if (globe && globe.render) globe.render();
+        window.scrollTo(0, 0);
         var r = els.globe.getBoundingClientRect();
         var ev = new PointerEvent('pointermove', {
           clientX: r.left + r.width * 0.5,
@@ -1728,12 +1767,55 @@
         ok = !!(els.hoverCard && !els.hoverCard.hidden && els.hcLat &&
                 els.hcLat.textContent && els.hcLat.textContent !== '—');
         detail = ok ? (els.hcLat.textContent + ' ' + els.hcLon.textContent) : t('st.noData');
+        if (!ok) {
+          var hp = globe.pick(r.width / 2, r.height / 2);
+          detail = 'rect ' + Math.round(r.width) + 'x' + Math.round(r.height) +
+            ' pick=' + (hp ? 'hit' : 'miss') + ' basis=' + (globe.basis ? 'y' : 'n');
+        }
       } catch (e) {
         detail = String(e && e.message ? e.message : e);
       }
       add(ok, t('st.hoverPointer'), detail);
       hideHover(true);
     })();
+
+    // 触摸点按：模拟 pointerdown/up（pointerType=touch），确认浮层出现（手机端）
+    (function () {
+      if (!globe || !S.frame || !els.globe) {
+        add(false, t('st.touchReadout'), t('st.noData'));
+        return;
+      }
+      var ok = false;
+      var detail = t('st.noData');
+      try {
+        if (globe && globe.render) globe.render();
+        window.scrollTo(0, 0);
+        var r = els.globe.getBoundingClientRect();
+        var base = {
+          bubbles: true, pointerId: 777, pointerType: 'touch', isPrimary: true,
+          clientX: r.left + r.width * 0.5, clientY: r.top + r.height * 0.5,
+          button: 0
+        };
+        els.globe.dispatchEvent(new PointerEvent('pointerdown', Object.assign({ buttons: 1 }, base)));
+        els.globe.dispatchEvent(new PointerEvent('pointerup', Object.assign({ buttons: 0 }, base)));
+        ok = !!(els.hoverCard && !els.hoverCard.hidden && els.hcLat &&
+                els.hcLat.textContent && els.hcLat.textContent !== '—');
+        detail = ok ? (els.hcLat.textContent + ' ' + els.hcLon.textContent) : t('st.noData');
+        if (!ok) {
+          var tp = globe.pick(r.width / 2, r.height / 2);
+          detail = 'rect ' + Math.round(r.width) + 'x' + Math.round(r.height) +
+            ' pick=' + (tp ? 'hit' : 'miss') + ' basis=' + (globe.basis ? 'y' : 'n');
+        }
+      } catch (e) {
+        detail = String(e && e.message ? e.message : e);
+      }
+      add(ok, t('st.touchReadout'), detail);
+      hideHover(true);
+    })();
+
+    // 手机/窄屏不能出现横向滚动（375/390 宽时最容易暴露）
+    add(document.documentElement.scrollWidth <= window.innerWidth + 1, t('st.noOverflow'),
+      document.documentElement.scrollWidth + ' / ' + window.innerWidth);
 
     if (globe) {
       var px = globe.probeCenter();

@@ -150,7 +150,31 @@ collector 会自动发现最近 `--recent-minutes`（默认 120）分钟内变�
 
 ---
 
-## 6. 调试清单（都是踩过的）
+## 6. 局域网 / 手机访问
+
+默认只有 `http://127.0.0.1:8765/`，因为 collector 跑在 WSL2 的 NAT 网络里。手机（连电脑热点）
+或局域网其他机器访问：
+
+```powershell
+pwsh -NoProfile -File ".\monitor\start.ps1" -Lan
+```
+
+`start.ps1` 启动 collector 后，会以管理员身份调用 `monitor/expose_lan.ps1`：
+
+1. 选择本机监听 IP：优先移动热点网关 `192.168.137.1`，否则主网卡 IPv4（可用 `-ListenIp` 指定）；
+2. 添加 Windows 端口代理 `<本机 IP>:8765 → <WSL IP>:8765`（WSL2 在 NAT 后面）；
+3. 添加入站防火墙规则（TCP 8765，`LocalSubnet`）。
+
+脚本会打印地址，例如 `http://192.168.137.1:8765/`，手机浏览器打开即可（手机可同时开着移动数据）。
+
+注意：
+* WSL2 在 `wsl --shutdown` 后 IP 会变，重新运行 `start.ps1 -Lan` 刷新端口代理；
+* `pwsh -File .\monitor\start.ps1 -LanRemove` 撤销端口代理和防火墙规则；
+* 需要管理员权限（UAC 提示）；collector 本身仍是只读的；
+* Windows 防火墙须开启；某些杀毒/VPN 也会拦入站。先在 Windows 上自测：
+  `curl http://<本机 IP>:8765/api/runs`。
+
+## 7. 调试清单（都是踩过的）
 
 | 现象 | 原因 / 解决 |
 | --- | --- |
@@ -182,7 +206,7 @@ collector 会自动发现最近 `--recent-minutes`（默认 120）分钟内变�
 
 ---
 
-## 7. 性能提示
+## 8. 性能提示
 
 * collector 每秒轮询一次、只读新追加字节；每个活跃 run 典型 CPU 为单核 **0.2–1 %**
   （轮询约 2 ms，RSS ≈100 MB）。

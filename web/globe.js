@@ -343,16 +343,41 @@
   Globe.prototype._bindEvents = function () {
     var self = this;
     var cv = this.canvas;
+    var pointers = new Map();
+    var pinch = null;
+
+    function pinchDistance() {
+      var pts = Array.from(pointers.values());
+      if (pts.length < 2) return 0;
+      return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 0.0001;
+    }
 
     cv.addEventListener('pointerdown', function (e) {
       if (e.button !== undefined && e.button !== 0) return;
-      cv.setPointerCapture && cv.setPointerCapture(e.pointerId);
-      self.dragging = true;
+      try { cv.setPointerCapture && cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer / unsupported */ }
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       self.autoRotate = false;
       self.anim = null;
+      if (pointers.size >= 2) {
+        // 双指：开始缩放，暂停旋转
+        self.dragging = false;
+        pinch = { dist: pinchDistance(), camDist: self.cam.dist };
+        return;
+      }
+      self.dragging = true;
       self.lastPtr = { x: e.clientX, y: e.clientY };
     });
     cv.addEventListener('pointermove', function (e) {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size >= 2 && pinch) {
+        var d = pinchDistance();
+        if (d > 1) {
+          self.cam.dist = clamp(pinch.camDist * (pinch.dist / d), 1.75, 6.5);
+          self.requestRender();
+        }
+        return;
+      }
       if (!self.dragging) return;
       var dx = e.clientX - self.lastPtr.x;
       var dy = e.clientY - self.lastPtr.y;
@@ -362,8 +387,15 @@
       self.requestRender();
     });
     function stopDrag(e) {
-      if (!self.dragging) return;
-      self.dragging = false;
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinch = null;
+      if (pointers.size === 1) {
+        var rest = Array.from(pointers.values())[0];
+        self.dragging = true;
+        self.lastPtr = { x: rest.x, y: rest.y };
+      } else if (pointers.size === 0) {
+        self.dragging = false;
+      }
       try { cv.releasePointerCapture && cv.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
       self.requestRender();
     }
@@ -379,6 +411,13 @@
     cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   };
 
+  /* 触屏 / 按钮缩放：factor > 1 拉近 */
+  Globe.prototype.zoomBy = function (factor) {
+    this.autoRotate = false;
+    this.anim = null;
+    this.cam.dist = clamp(this.cam.dist / factor, 1.75, 6.5);
+    this.requestRender();
+  };
   /* ---- 数据 ---- */
 
   Globe.prototype.setGrid = function (grid) {

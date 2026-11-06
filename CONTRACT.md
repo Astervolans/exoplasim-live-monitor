@@ -4,7 +4,9 @@
 > `plasim_snapshot` raw file (plus namelists / optional `spec.json`), and serves
 > `/api/runs`, `/api/state`, `/api/frame` (EXOF binary: 9 float32 layers),
 > `/api/land` and the static frontend. The UI shows **model frame only**, supports
-> zh/en, K/°C, hover readouts and multi-run selection. Full details below are in Chinese.
+> zh/en, K/°C, hover readouts and multi-run selection, is responsive for desktop and
+> phones (touch drag, pinch zoom, tap-to-read), and can be exposed to the LAN/hotspot
+> with `start.ps1 -Lan`. Full details below are in Chinese.
 >
 > 本文件由 Lead 维护，是 backend（`monitor/collector/`）与 frontend（`monitor/web/`）之间**唯一的接口约定**。
 > 任何一方改接口，必须先改这里。测试用 fixture 与 mock server 在 `monitor/test/`。
@@ -298,7 +300,14 @@ header JSON：
 - **语言**：中文 / English 切换（顶栏、localStorage 记忆、`?lang=zh|en` 深链、`<html lang>` 同步）。
   所有用户可见文案（含图层名、状态、参数标签、自检、悬停、aria/title）都要双语；
   英文模式不依赖后端返回的中文 `status_text`/`layer.name`（前端按结构化字段重建）。
-- 深色主题；1366×768 可用；`prefers-reduced-motion` 尊重。
+- 深色主题；桌面 1366×768 与手机竖屏 390×844 / 横屏 844×390 都可用；`prefers-reduced-motion` 尊重。
+- **移动端/触控（硬要求）**：
+  - 竖屏：球体在上、面板在下（页面纵向滚动），顶栏换行、不出现横向滚动；
+  - 横屏：球体与侧栏左右分栏；安全区 `env(safe-area-inset-*)`；
+  - 手势：单指拖动旋转、**双指捏合缩放**、`+ / −` 缩放按钮、双击复位；
+  - 触屏没有 hover：**点按球面**显示与桌面相同的浮层（再点别处或点空白关闭）；
+  - 触控目标 ≥ 40 CSS px；图层网格在窄屏为 2 列。
+- 局域网/手机访问由 `start.ps1 -Lan`（内部调用 `expose_lan.ps1`，管理员）做端口代理与防火墙，前端不需要知道地址；`?run=`/`?lang=` 等深链在手机上同样有效。
 - **只用** `/api/state`、`/api/frame`、`/api/land`；不写死 8765 以外的东西，端口取 `location.origin`。
 - 每 1 s 轮询 state；帧更新时若用户在拖动/暂停则不抢占视角。
 

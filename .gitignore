@@ -38,3 +38,6 @@ desktop.ini
 # local demo/validation outputs
 /_crossyear/
 /_run*/
+
+# LAN exposure runtime log
+expose_lan.log

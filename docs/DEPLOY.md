@@ -160,7 +160,35 @@ The collector auto-discovers any `/opt/exoplasim/runs/**/plasim_namelist` (top l
 
 ---
 
-## 6. Debugging checklist
+## 6. LAN / phone access
+
+By default the UI is only on `http://127.0.0.1:8765/`, because the collector runs inside
+WSL2's NAT network. To watch from a phone (connected to the PC's mobile hotspot) or another
+machine on the same LAN:
+
+```powershell
+pwsh -NoProfile -File ".\monitor\start.ps1" -Lan
+```
+
+`start.ps1` starts the collector and then invokes `monitor/expose_lan.ps1` elevated. The
+helper:
+
+1. picks the host IP (the mobile-hotspot gateway `192.168.137.1` when present, otherwise the
+   primary adapter IPv4; override with `-ListenIp`);
+2. adds a Windows port proxy `<host-ip>:8765 → <wsl-ip>:8765` (WSL2 is behind NAT);
+3. adds an inbound firewall rule for TCP 8765 scoped to `LocalSubnet`.
+
+It prints the URL, e.g. `http://192.168.137.1:8765/`. Use that URL on the phone (the phone
+must be on the hotspot/Wi-Fi; mobile data can stay on).
+
+Notes:
+* WSL2 gets a new IP after `wsl --shutdown`; re-run `start.ps1 -Lan` to refresh the proxy.
+* `pwsh -File .\monitor\start.ps1 -LanRemove` removes the proxy and firewall rule.
+* The helper needs administrator rights (UAC prompt); the collector itself remains read-only.
+* Windows Firewall must be on; antivirus/VPN tools that filter inbound traffic may also block
+  the port. Test from Windows first: `curl http://<host-ip>:8765/api/runs`.
+
+## 7. Debugging checklist
 
 | Symptom | Cause / fix |
 | --- | --- |
@@ -193,7 +221,7 @@ http://127.0.0.1:8765/?selftest=1
 
 ---
 
-## 7. Performance notes
+## 8. Performance notes
 
 * The collector polls once per second and reads only appended bytes; typical CPU is
   **0.2–1 % of one core per active run** (≈2 ms poll, ≈100 MB RSS).
