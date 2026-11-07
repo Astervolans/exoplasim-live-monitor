@@ -608,15 +608,16 @@ def frame_period_stats(intervals=None, wall_elapsed_s=None, months_done=None,
     自身的时间进度，用来估算「模型多久产出一帧」。
 
     返回 dict：
-      * ``last_s`` / ``median_s``：实测的上一次/中位间隔（可能为 None）；
+      * ``last_s`` / ``median_s`` / ``avg_s``：实测的上一次/中位/平均间隔（可能为 None）；
       * ``est_s``：按模型进度估算的间隔（可能为 None）；
-      * ``period_s``：自适应轮询采用值（优先实测中位，其次估算）；
+      * ``period_s``：自适应采用值（优先实测平均，其次估算）；
       * ``source``：``mtime``（文件生成时间实测）/ ``estimated`` / ``unknown``；
       * ``samples``：参与统计的实测样本数。
     """
     vals = sorted(float(v) for v in (intervals or []) if v and v > 0)
     last_s = round(float(intervals[-1]), 2) if intervals else None
     median_s = round(vals[len(vals) // 2], 2) if vals else None
+    avg_s = round(sum(vals) / len(vals), 2) if vals else None
     est_s = None
     try:
         if wall_elapsed_s and months_done and months_done > 0:
@@ -625,14 +626,17 @@ def frame_period_stats(intervals=None, wall_elapsed_s=None, months_done=None,
                 est_s = round(est, 2)
     except (TypeError, ValueError, ZeroDivisionError):
         est_s = None
-    if median_s and median_s > 0:
-        return {"last_s": last_s, "median_s": median_s, "est_s": est_s,
-                "period_s": median_s, "source": "mtime", "samples": len(vals)}
+    if avg_s and avg_s > 0:
+        return {"last_s": last_s, "median_s": median_s, "avg_s": avg_s,
+                "est_s": est_s, "period_s": avg_s, "source": "mtime",
+                "samples": len(vals)}
     if est_s:
-        return {"last_s": last_s, "median_s": median_s, "est_s": est_s,
-                "period_s": est_s, "source": "estimated", "samples": len(vals)}
-    return {"last_s": last_s, "median_s": median_s, "est_s": est_s,
-            "period_s": None, "source": "unknown", "samples": len(vals)}
+        return {"last_s": last_s, "median_s": median_s, "avg_s": avg_s,
+                "est_s": est_s, "period_s": est_s, "source": "estimated",
+                "samples": len(vals)}
+    return {"last_s": last_s, "median_s": median_s, "avg_s": avg_s,
+            "est_s": est_s, "period_s": None, "source": "unknown",
+            "samples": len(vals)}
 
 
 def adaptive_poll_interval(base_interval, max_interval, frame_period_s=None,

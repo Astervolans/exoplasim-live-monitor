@@ -511,6 +511,7 @@ class RunMonitor:
             "poll_interval_s": round(self.poll_interval, 2),
             "frame_period_s": fps["last_s"],
             "frame_period_median_s": fps["median_s"],
+            "frame_period_avg_s": fps["avg_s"],
             "frame_period_est_s": fps["est_s"],
             "frame_period_source": fps["source"],
             "frame_rate_per_hour": (round(3600.0 / fps["period_s"], 2)
@@ -566,6 +567,7 @@ class RunMonitor:
             "poll_interval_s": round(self.poll_interval, 2),
             "frame_period_s": fps["last_s"],
             "frame_period_median_s": fps["median_s"],
+            "frame_period_avg_s": fps["avg_s"],
             "frame_period_est_s": fps["est_s"],
             "frame_period_source": fps["source"],
             "frame_period_samples": fps["samples"],

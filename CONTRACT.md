@@ -104,6 +104,7 @@ Windows 浏览器  ──HTTP──>  127.0.0.1:8765  (WSL2 内 python, /opt/exo
     "poll_interval_s": 8.5,          // 当前空闲轮询周期（mtime 变化会立即触发，不等它）
     "frame_period_s": 34.1,          // 上一帧→当前帧的 raw 文件 mtime 差（秒）
     "frame_period_median_s": 34.0,   // 最近若干帧 mtime 间隔中位数
+    "frame_period_avg_s": 34.2,      // 最近若干帧 mtime 间隔平均值（轮询/颜色采用它）
     "frame_period_est_s": 33.8,      // 按模型进度估算的帧周期（无实测时兜底）
     "frame_period_source": "mtime",  // mtime（文件生成时间实测）/ estimated
     "frame_rate_per_hour": 105.6,    // 3600/帧周期，可为 null
@@ -303,6 +304,12 @@ header JSON：
   标题区同时显示当前 run 的完整 `run_id` 与 workdir（可复制）。
 - **年份从 0 开始**（第 0 年 = 第一个模拟年）；前端直接用 `run.year_no`，不要自行 +1。 
 - 状态徽标：运行中(绿)/配置中(黄)/等待(灰)/已结束(蓝)/错误(红)，以及 `updated` 距今秒数（>5s 变黄）。
+- **更新时间颜色（自适应）**：不能固定 5/30 s。用 `frame_period_avg_s`（无则 `frame_period_median_s` → `frame_period_est_s`）判断：
+  - 蓝：`age < period`，文案「更新 X 前 · 预期 Y 后更新」；
+  - 黄：超过预期 `max(5s, 0.5×period)`，文案「更新 X 前 · 预期已过 Y」；
+  - 红：超过预期 `max(20s, 1.5×period)`；
+  - 已结束 `finished` 不按此变色；无帧/无周期时仅显示距今，保持蓝色。
+  这样 T85（30–40 s/帧）不会在 10 s 时被判红。
 - **语言**：中文 / English 切换（顶栏、localStorage 记忆、`?lang=zh|en` 深链、`<html lang>` 同步）。
   所有用户可见文案（含图层名、状态、参数标签、自检、悬停、aria/title）都要双语；
   英文模式不依赖后端返回的中文 `status_text`/`layer.name`（前端按结构化字段重建）。

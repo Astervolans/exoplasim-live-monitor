@@ -139,9 +139,9 @@ tr = 178+179`；`spd = hypot(u,v)`。
 
 1. **统计帧间隔**：每帧完成时记下 raw 的 `mtime`，相邻帧 mtime 差即该帧的生成时间
    （`<0.5 s` 的 backlog 批解析帧会被过滤）；`/api/state` 暴露
-   `frame_period_s` / `frame_period_median_s` / `frame_period_est_s` /
+   `frame_period_s` / `frame_period_avg_s` / `frame_period_median_s` / `frame_period_est_s` /
    `frame_period_source`（`mtime` 或 `estimated`）/ `frame_rate_per_hour`。
-2. **决定轮询周期**：`poll_interval = clamp(mtime_median / 4, --interval, --max-interval)`。
+2. **决定轮询周期**：`poll_interval = clamp(mtime_avg / 4, --interval, --max-interval)`。
    T21 约 5 s/帧 → ~1.25 s；T85 约 30–40 s/帧 → ~9 s（上限 30 s）。
 
 **即时显示**：主循环仍是 1 s tick，但每 tick 只 `stat` 一次；`mtime` 一变就立刻

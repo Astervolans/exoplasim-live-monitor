@@ -118,8 +118,8 @@ project's `preset/specs/pleiroma.json` plus a restart file works). See
 * **Timeline** — `ts_mean` and `ntr` series, yearly points, history slider and playback;
   "back to live" returns to the newest frame.
 * **Language** — 中文 / English switch; `?lang=en` deep link.
-* **Self-test** — `http://127.0.0.1:8765/?selftest=1` (23 checks: API, EXOF parsing,
-  WebGL2 render, hover sampling, touch tap, K→°C, i18n, pointer events, land mask,
+* **Self-test** — `http://127.0.0.1:8765/?selftest=1` (24 checks: API, EXOF parsing,
+  WebGL2 render, hover sampling, touch tap, K→°C, i18n, pointer events, land mask, freshness colour,
   no horizontal overflow, no third-party requests).
 
 Phone screenshots (iPhone-14 viewport, 390×844):
@@ -186,7 +186,7 @@ HTTP API (see [CONTRACT.md](CONTRACT.md)):
 | Cross-year (5 years, 2 h timestep) | 180 frames; year sequence 0→1→2→3→4 with each transition `(Y, 12, 30) → (Y+1, 1, 20)`; no `第 N+1 年 · 第 12 月` jump. Script: `test/watch_crossyear.py` |
 | Multi-run | two concurrent 6-month runs both live, each with 12 frames; cross-session runs are listed too, including nested `<root>/<case>/run_round_NNN/` workdirs |
 | API verifier | `test/verify_api.py` → **ALL CHECKS PASSED** |
-| Frontend self-test | **23/23** against the real collector (zh and en; includes pointer hover, touch tap, land mask, no horizontal overflow, i18n, K→°C) |
+| Frontend self-test | **24/24** against the real collector (zh and en; includes pointer hover, touch tap, land mask, freshness colour, no horizontal overflow, i18n, K→°C) |
 | Phone layout | iPhone-14 emulation 390×844 + landscape 844×390: no horizontal overflow, tap readout, pinch/zoom buttons; screenshots above |
 | LAN access | `start.ps1 -Lan` → port proxy + `LocalSubnet` firewall rule; `http://192.168.137.1:8765/` returns 200 from the host; `-LanRemove` cleans up |
 | Raw header recovery | `collector/selftest_rawburn.py`: zero prefix → valid header → truncate → rewrite, **ALL PASS**; a live T85 (256×512, 493 MB) run lists 25 frames |

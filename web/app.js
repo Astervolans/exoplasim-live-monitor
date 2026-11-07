@@ -623,6 +623,17 @@
     }
   }
 
+  /* 更新时间颜色：按快照周期判断，而不是固定 5/30 s。
+   * 正常（蓝）：还在预期周期内；偏晚（黄）：超过预期较久；
+   * 超时（红）：超过预期一个周期以上。T85 的 30–40 s 帧周期不会提前变红。 */
+  function freshnessLevel(age, period) {
+    if (!period || !isFinite(period) || period <= 0) return 'ok';
+    var late = age - period;
+    if (late > Math.max(20, period * 1.5)) return 'dead';
+    if (late > Math.max(5, period * 0.5)) return 'stale';
+    return 'ok';
+  }
+
   function renderFreshness() {
     var st = S.st;
     if (!els.freshness) return;
@@ -632,14 +643,32 @@
       els.freshness.title = t('title.freshness');
       return;
     }
+    var run = st.run || {};
+    var period = run.frame_period_avg_s || run.frame_period_median_s || run.frame_period_est_s || null;
     var age = Date.now() / 1000 - st.meta.updated;
-    var txt;
-    if (age < 0) { txt = t('fresh.justNow'); age = 0; }
-    else if (age < 10) txt = t('fresh.ago', { s: age.toFixed(1) });
-    else txt = t('fresh.ago', { s: Math.round(age) });
-    els.freshness.textContent = t('fresh.update', { ago: txt });
-    els.freshness.className = 'fresh' + (age > 30 ? ' dead' : age > 5 ? ' stale' : '');
-    els.freshness.title = t('fresh.title', { s: age.toFixed(1) });
+    var ago;
+    if (age < 0) { ago = t('fresh.justNow'); age = 0; }
+    else if (age < 10) ago = t('fresh.ago', { s: age.toFixed(1) });
+    else ago = t('fresh.ago', { s: Math.round(age) });
+
+    var expected = '';
+    if (period && run.status !== 'finished') {
+      if (age < period) expected = t('fresh.expectedIn', { s: fmtSecondsShort(period - age) });
+      else expected = t('fresh.expectedPast', { s: fmtSecondsShort(age - period) });
+    }
+    els.freshness.textContent = expected
+      ? t('fresh.updateExpected', { ago: ago, expected: expected })
+      : t('fresh.update', { ago: ago });
+
+    var level = run.status === 'finished' ? 'ok' : freshnessLevel(age, period);
+    els.freshness.className = 'fresh' + (level === 'dead' ? ' dead' : level === 'stale' ? ' stale' : '');
+    els.freshness.title = period
+      ? t('fresh.titleExpected', {
+        age: age.toFixed(1),
+        period: fmtSecondsShort(period),
+        source: t(run.frame_period_source === 'mtime' ? 'fresh.sourceMtime' : 'fresh.sourceEstimated')
+      })
+      : t('fresh.title', { s: age.toFixed(1) });
   }
 
   function renderConn() {
@@ -714,7 +743,7 @@
         && run.frame_period_median_s) {
       periodTxt = t('kv.framePeriodObserved', {
         last: fmtSecondsShort(run.frame_period_s),
-        median: fmtSecondsShort(run.frame_period_median_s)
+        avg: fmtSecondsShort(run.frame_period_avg_s || run.frame_period_median_s)
       });
     } else if (run.frame_period_est_s) {
       periodTxt = t('kv.framePeriodEstimated', { est: fmtSecondsShort(run.frame_period_est_s) });
@@ -1895,6 +1924,12 @@
       add(ok, t('st.i18nSwitch'), t('st.i18nSwitchDetail', { text: enLayer }));
       updateLangUI();
     })();
+
+    // 更新时间颜色：按快照周期，而不是固定 5/30 s（T85 不会被提前判红）
+    add(freshnessLevel(10, 36) === 'ok' && freshnessLevel(40, 36) === 'ok' &&
+        freshnessLevel(70, 36) === 'stale' && freshnessLevel(130, 36) === 'dead' &&
+        freshnessLevel(6, 5) === 'ok',
+        t('st.freshness'), '10/36 ok · 70/36 stale · 130/36 dead');
 
     var pass = items.filter(function (x) { return x.ok; }).length;
     var fail = items.length - pass;
