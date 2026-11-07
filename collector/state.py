@@ -205,6 +205,34 @@ def pyfft_error():
     return _PYFFT_ERROR
 
 
+def orography_grid(spectral, nlat, nlon, ntru, physfilter=True):
+    """谱系数 129（oro）→ 地形高度 (nlat,nlon)，单位 m。
+
+    与风场一样来自 ``pyfft.sp2gp``：返回 (nlon,nlat)，转置后 ``np.roll``
+    半圈对齐模型输出（实测与 topomap .sra 相关系数 ≈0.97）。
+    缺失/失败时返回 ``None``（前端按无地形处理）。
+    """
+    levels = spectral.get(129) or {}
+    if not levels:
+        return None
+    lev = 0 if 0 in levels else min(levels)
+    sp = np.asarray(levels[lev], dtype=np.float64)
+    expect = 2 + 3 * int(ntru) + int(ntru) * int(ntru)
+    if sp.size != expect:
+        return None
+    pyfft = get_pyfft()
+    if pyfft is None:
+        return None
+    try:
+        gp = np.asarray(pyfft.sp2gp(sp.reshape(-1, 1), int(nlat), int(nlon),
+                                    int(ntru), int(bool(physfilter))))
+        grid = np.transpose(gp[:, :, 0])
+        grid = np.roll(grid, int(nlon) // 2, axis=1)
+        return np.ascontiguousarray(grid, dtype=np.float32)
+    except Exception:  # noqa: BLE001 - 地形是可选装饰，失败不影响主图层
+        return None
+
+
 def wind_lowest(spectral, nlat, nlon, nlev, ntru, plarad, physfilter=True,
                 lat_rad=None):
     """谱系数 (155 散度, 138 涡度) → 最底层 u/v，形状 (nlat, nlon)。
@@ -540,6 +568,14 @@ def build_frame(raw, resampler, params, raw_params, year_index, frame_in_year,
     prw = field("prw")
     ntr = field("rst") + field("rlut")
 
+    oro = None
+    ntru = params.get("ntru")
+    if ntru:
+        oro = orography_grid(raw.spectral, nlat, nlon, int(ntru),
+                             physfilter=physfilter)
+    if oro is None or oro.shape != (nlat, nlon):
+        oro = zeros
+
     u = v = None
     if raw.has_wind() and params.get("ntru"):
         try:
@@ -559,6 +595,7 @@ def build_frame(raw, resampler, params, raw_params, year_index, frame_in_year,
               "sic": sic, "sit": sit, "clt": clt}
     unified = resampler.upsample_many(fields)
     unified["lsm"] = resampler.upsample(lsm)      # 只给 /api/land，不进 EXOF order
+    unified["oro"] = resampler.upsample(oro)      # 地形高度（m），只给 /api/land
     weights = gauss_weights(nlat)
 
     # 供 /api/state.layers 的 min/max（在发布时一并算好，避免每请求重扫）
@@ -815,20 +852,24 @@ def frame_exof(frame, order=FRAME_ORDER, units=FRAME_UNITS):
 
 
 def land_exof(frame):
-    """``/api/land``：同样 EXOF 封装，``order=["lsm"]``。"""
+    """``/api/land``：EXOF 封装 ``order=["lsm","oro"]``（陆海掩膜 + 地形高度 m）。"""
     lsm = frame.arrays.get("lsm")
     if lsm is None:
         lsm = np.zeros_like(frame.arrays["ts"])
+    oro = frame.arrays.get("oro")
+    if oro is None:
+        oro = np.zeros_like(lsm)
     header = {
         "id": frame.id,
         "step": frame.step,
         "year": frame.year,
         "nlat": int(lsm.shape[0]),
         "nlon": int(lsm.shape[1]),
-        "order": ["lsm"],
-        "units": {"lsm": "1"},
+        "order": ["lsm", "oro"],
+        "units": {"lsm": "1", "oro": "m"},
         "complete": True,
     }
     payload = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return b"".join([b"EXOF", struct.pack("<II", 1, len(payload)), payload,
-                     np.ascontiguousarray(lsm, dtype="<f4").tobytes()])
+                     np.ascontiguousarray(lsm, dtype="<f4").tobytes(),
+                     np.ascontiguousarray(oro, dtype="<f4").tobytes()])

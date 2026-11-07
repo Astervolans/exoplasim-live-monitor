@@ -178,6 +178,7 @@ def main(argv=None) -> int:
     lheader, larrays = parse_exof(lbody)
     check("lsm" in larrays, "land 含 lsm", failures)
     check(larrays["lsm"].shape == (nlat, nlon), "land 网格一致", failures)
+    check("oro" in larrays, "land 含地形 oro", failures)
 
     if args.also_run:
         print("\n== 多 run: %s ==" % args.also_run)

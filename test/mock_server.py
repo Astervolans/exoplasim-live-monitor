@@ -33,6 +33,36 @@ LOCK = threading.Lock()
 STARTED = time.time()
 
 
+def ensure_land_oro(land: bytes) -> bytes:
+    """fixture 的 land.bin 只有 lsm；补一层合成地形（m），用于前端 3D 地形测试。"""
+    if land[:4] != b"EXOF":
+        return land
+    try:
+        _ver, hlen = struct.unpack("<II", land[4:12])
+        header = json.loads(land[12:12 + hlen].decode("utf-8"))
+        if "oro" in header.get("order", []):
+            return land
+        nlat, nlon = int(header["nlat"]), int(header["nlon"])
+        off = 12 + hlen
+        n = nlat * nlon
+        lsm = np.frombuffer(land, dtype="<f4", count=n, offset=off).reshape(nlat, nlon)
+        lat = np.linspace(80.0, -80.0, nlat)[:, None] * np.pi / 180.0
+        lon = np.linspace(0.0, 2.0 * np.pi, nlon, endpoint=False)[None, :]
+        relief = 1800.0 + 2600.0 * np.sin(3.0 * lon) * np.cos(2.0 * lat) \
+            + 1200.0 * np.sin(7.0 * lon + 1.3) * np.cos(5.0 * lat)
+        oro = np.clip(lsm, 0, 1) * np.maximum(relief, 0.0)
+        oro = np.ascontiguousarray(oro, dtype="<f4")
+        header["order"] = list(header.get("order", ["lsm"])) + ["oro"]
+        units = dict(header.get("units") or {})
+        units["oro"] = "m"
+        header["units"] = units
+        payload = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        return b"".join([b"EXOF", struct.pack("<II", 1, len(payload)), payload,
+                         np.ascontiguousarray(lsm, dtype="<f4").tobytes(), oro.tobytes()])
+    except Exception:  # noqa: BLE001 - 可选装饰，失败就保持原样
+        return land
+
+
 def load_runs() -> None:
     with open(os.path.join(FIXTURE, "runs.json"), "r", encoding="utf-8") as handle:
         runs_doc = json.load(handle)
@@ -46,7 +76,7 @@ def load_runs() -> None:
         with open(os.path.join(run_dir, "frames.bin"), "rb") as handle:
             body = handle.read()
         with open(os.path.join(run_dir, "land.bin"), "rb") as handle:
-            land = handle.read()
+            land = ensure_land_oro(handle.read())
         RUNS[run_id] = {"entry": entry, "frames": frames, "body": body, "land": land,
                         "template": template, "cursor": 0}
     # 第二个 run 错开半帧

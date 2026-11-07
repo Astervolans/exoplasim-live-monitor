@@ -50,7 +50,7 @@ wsl -d Ubuntu-24.04 -u root -- /opt/exoplasim/env/bin/python \
 * `GET /api/runs`
 * `GET /api/state?run=<run_id>`
 * `GET /api/frame?run=<run_id>&id=<int|latest>` → EXOF 二进制（8 图层 float32）
-* `GET /api/land?run=<run_id>` → EXOF（`lsm`）
+* `GET /api/land?run=<run_id>` → EXOF（`lsm` + `oro` 地形高度 m）
 * 其余路径 → `monitor/web/` 静态文件（防路径穿越、`Cache-Control: no-store`、CORS `*`）
 
 `run` 省略 = 最新活跃 run；未知 run → 404 `{"ok":false,"error":"unknown run"}`。
@@ -164,7 +164,7 @@ tr = 178+179`；`spd = hypot(u,v)`。
    （6 个月 → 6.0）；普通整年 run 用 `N_RUN_YEARS*12 + N_RUN_MONTHS`。
 4. 一年以上的 run 在年末 `plasim_snapshot → MOST_SNAP.NNNNN` 改名：解析器跟随同 inode
    继续读完最后一帧，`year_index += 1`；新一年的 raw 重新出现后继续。
-5. `/api/land` 的 `lsm` 取最新帧（模型每年可能重算掩膜，前端可定期重取）。
+5. `/api/land` 的 `lsm`/`oro` 取最新帧（模型每年可能重算掩膜/地形；`oro` 由谱 code 129 经 `pyfft.sp2gp` 重建，失败时为 0）。
 6. 运行目录被 finalize 删除后仍保留在 `/api/runs`（`status:"finished"`）直到进程退出；
    重启 collector 后从 `--recent-minutes` 窗口内的目录重建（已结束的 run 只有空 history，
    `status_text` 会写明「无帧（未产生原始快照）」）。

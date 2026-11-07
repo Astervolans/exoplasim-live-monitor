@@ -96,6 +96,7 @@ project's `preset/specs/pleiroma.json` plus a restart file works). See
   drag to rotate, wheel to zoom, double-click to reset; lighting / graticule / coastline
   overlays are individually switchable. Only the **model frame** (rotation axis as pole)
   is used — the monitor deliberately focuses on the simulation itself.
+* **3D terrain** — optional **Terrain** chip (off by default). Elevation comes from the raw spectral orography (code 129); the display is non-proportional: the current maximum elevation always maps to 5 % of the planet radius, so even a 2 km highland is visible. Mountains are shaded and the sphere silhouette is displaced.
 * **Layers** — surface temperature `ts` (K), precipitation `pr` (mm/day), wind speed
   `spd` (m/s) with optional wind vectors, sea-ice **cover** `sic` (0–1), sea-ice
   **thickness** `sit` (0–9 m), cloud cover `clt` (0–1, shown as %), 2 m air temperature
@@ -104,6 +105,7 @@ project's `preset/specs/pleiroma.json` plus a restart file works). See
   the nearest-grid-cell value of the current layer plus `ts/tas/spd/sic/sit/clt`;
   pin a point with `?hover=<lat>,<lon>`. On touch screens, **tap** the globe to show the
   same card (tap elsewhere to dismiss).
+* **Terrain toggle** — `地形` chip / `?terrain=1`; when off the globe is exactly the original sphere. On phones the same chip is available.
 * **Touch controls** — drag to rotate, **pinch to zoom**, `+ / −` buttons, double-tap/双击复位;
   layout stacks the globe above the panels in portrait and uses a side-by-side layout in
   landscape. Safe-area insets are respected on notched phones.
@@ -118,8 +120,8 @@ project's `preset/specs/pleiroma.json` plus a restart file works). See
 * **Timeline** — `ts_mean` and `ntr` series, yearly points, history slider and playback;
   "back to live" returns to the newest frame.
 * **Language** — 中文 / English switch; `?lang=en` deep link.
-* **Self-test** — `http://127.0.0.1:8765/?selftest=1` (24 checks: API, EXOF parsing,
-  WebGL2 render, hover sampling, touch tap, K→°C, i18n, pointer events, land mask, freshness colour,
+* **Self-test** — `http://127.0.0.1:8765/?selftest=1` (25 checks: API, EXOF parsing,
+  WebGL2 render, hover sampling, touch tap, K→°C, i18n, pointer events, land mask, terrain, freshness colour,
   no horizontal overflow, no third-party requests).
 
 Phone screenshots (iPhone-14 viewport, 390×844):
@@ -130,6 +132,11 @@ Phone screenshots (iPhone-14 viewport, 390×844):
 Landscape phone (844×390):
 
 ![Phone landscape](web/_preview/mobile_844x390.png)
+
+Terrain display (off / adaptive exaggerated):
+
+![Terrain off](web/_preview/terrain_off.png)
+![Terrain on](web/_preview/terrain_on.png)
 
 ---
 
@@ -186,9 +193,10 @@ HTTP API (see [CONTRACT.md](CONTRACT.md)):
 | Cross-year (5 years, 2 h timestep) | 180 frames; year sequence 0→1→2→3→4 with each transition `(Y, 12, 30) → (Y+1, 1, 20)`; no `第 N+1 年 · 第 12 月` jump. Script: `test/watch_crossyear.py` |
 | Multi-run | two concurrent 6-month runs both live, each with 12 frames; cross-session runs are listed too, including nested `<root>/<case>/run_round_NNN/` workdirs |
 | API verifier | `test/verify_api.py` → **ALL CHECKS PASSED** |
-| Frontend self-test | **24/24** against the real collector (zh and en; includes pointer hover, touch tap, land mask, freshness colour, no horizontal overflow, i18n, K→°C) |
+| Frontend self-test | **25/25** against the real collector (zh and en; includes pointer hover, touch tap, land mask, terrain, freshness colour, no horizontal overflow, i18n, K→°C) |
 | Phone layout | iPhone-14 emulation 390×844 + landscape 844×390: no horizontal overflow, tap readout, pinch/zoom buttons; screenshots above |
 | LAN access | `start.ps1 -Lan` → port proxy + `LocalSubnet` firewall rule; `http://192.168.137.1:8765/` returns 200 from the host; `-LanRemove` cleans up |
+| Terrain | `/api/land` now returns `order=["lsm","oro"]`; `地形` / `?terrain=1` displaces the mesh to 5 % radius at the current max elevation, off by default; T85 max ≈28.7 km |
 | Raw header recovery | `collector/selftest_rawburn.py`: zero prefix → partial header (offset stays 0) → valid header → truncate → rewrite, **ALL PASS**; a live T85 (256×512, 493 MB) run lists 25 frames |
 | Adaptive polling | T85 frame period ≈30–40 s → idle poll ≈9 s (cap 30 s); a 105 s probe measured the next frame within ≤0.5 s of the raw file's `mtime` change. CPU ≈1–1.5 %, RSS ≈300 MB (chunked reads). `--no-adaptive` restores fixed `--interval` |
 

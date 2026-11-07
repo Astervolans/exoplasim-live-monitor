@@ -108,10 +108,15 @@
     'in vec3 aPos;',
     'in vec2 aUV;',
     'uniform mat4 uVP;',
+    'uniform sampler2D uTerrain;',
+    'uniform float uTerrainOn;',
+    'uniform float uTerrainAmp;',
     'out vec2 vUV;',
     'out vec3 vWorld;',
     'void main() {',
-    '  vec3 p = aPos;',
+    '  float h = 0.0;',
+    '  if (uTerrainOn > 0.5) h = textureLod(uTerrain, aUV, 0.0).r;',
+    '  vec3 p = aPos * (1.0 + h * uTerrainAmp);',
     '  vUV = aUV;',
     '  vWorld = p;',
     '  gl_Position = uVP * vec4(p, 1.0);',
@@ -135,6 +140,8 @@
     'uniform float uLandOn;',
     'uniform float uHasData;',
     'uniform float uHasLand;',
+    'uniform sampler2D uTerrain;',
+    'uniform float uTerrainOn;',
     'out vec4 outColor;',
     '',
     'float gridMask(vec2 uv) {',
@@ -173,6 +180,11 @@
     '  vec3 vdir = normalize(uCam - vWorld);',
     '  float fres = pow(1.0 - clamp(abs(dot(n, vdir)), 0.0, 1.0), 3.0);',
     '  base += vec3(0.16, 0.34, 0.62) * fres * 0.55;',
+    '  if (uTerrainOn > 0.5) {',
+    '    float h = clamp(texture(uTerrain, uv).r, 0.0, 1.0);',
+    '    base *= 0.82 + 0.38 * h;',
+    '    base = mix(base, vec3(0.66, 0.60, 0.50), smoothstep(0.55, 1.0, h) * 0.35);',
+    '  }',
     '  outColor = vec4(base, 1.0);',
     '}'
   ].join('\n');
@@ -206,9 +218,11 @@
     this.current = null;
     this.dataTex = Object.create(null);
     this.landRec = null;
+    this.terrainRec = null;
+    this.terrainMax = 0;
     this.grid = { nlat: 64, nlon: 128 };
     this.wind = null;
-    this.options = { light: true, grid: true, land: true, arrows: true };
+    this.options = { light: true, grid: true, land: true, arrows: true, terrain: false };
 
     var gl = canvas.getContext('webgl2', {
       antialias: true, alpha: false, depth: true, stencil: false,
@@ -245,6 +259,9 @@
       uData: gl.getUniformLocation(prog, 'uData'),
       uLut: gl.getUniformLocation(prog, 'uLut'),
       uLand: gl.getUniformLocation(prog, 'uLand'),
+      uTerrain: gl.getUniformLocation(prog, 'uTerrain'),
+      uTerrainOn: gl.getUniformLocation(prog, 'uTerrainOn'),
+      uTerrainAmp: gl.getUniformLocation(prog, 'uTerrainAmp'),
       uTexel: gl.getUniformLocation(prog, 'uTexel'),
       uNlat: gl.getUniformLocation(prog, 'uNlat'),
       uSun: gl.getUniformLocation(prog, 'uSun'),
@@ -480,6 +497,49 @@
     return true;
   };
 
+  /* 地形高度（m）：非比例自适应显示——当前最高点固定到 uTerrainAmp 半径。
+     关闭时 uTerrainOn=0，几何完全不变。 */
+  Globe.prototype.setTerrain = function (data, nlat, nlon) {
+    var gl = this.gl;
+    if (!gl) return false;
+    var n = nlat * nlon;
+    var maxH = 0;
+    if (data && data.length >= n) {
+      for (var i = 0; i < n; i++) {
+        var v = data[i];
+        if (v > maxH) maxH = v;
+      }
+    }
+    if (!(maxH > 1e-3)) {
+      if (this.terrainRec) { gl.deleteTexture(this.terrainRec.tex); this.terrainRec = null; }
+      this.terrainMax = 0;
+      this.requestRender();
+      return false;
+    }
+    var bytes = new Uint8Array(n);
+    var inv = 255 / maxH;
+    for (var j = 0; j < n; j++) {
+      var h = data[j];
+      if (h > 0) bytes[j] = Math.min(255, Math.max(0, Math.round(h * inv)));
+    }
+    if (!this.terrainRec) {
+      this.terrainRec = { tex: gl.createTexture(), nlat: nlat, nlon: nlon };
+      gl.bindTexture(gl.TEXTURE_2D, this.terrainRec.tex);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    }
+    var rec = this.terrainRec;
+    rec.nlat = nlat; rec.nlon = nlon;
+    gl.bindTexture(gl.TEXTURE_2D, rec.tex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, nlon, nlat, 0, gl.RED, gl.UNSIGNED_BYTE, bytes);
+    this.terrainMax = maxH;
+    this.requestRender();
+    return true;
+  };
   Globe.prototype.setColormap = function (name) {
     if (!name || name === this.lutName) return;
     var gl = this.gl;
@@ -521,6 +581,7 @@
     this.current = null;
     this.wind = null;
     if (this.landRec) { gl.deleteTexture(this.landRec.tex); this.landRec = null; }
+    if (this.terrainRec) { gl.deleteTexture(this.terrainRec.tex); this.terrainRec = null; }
     this.requestRender();
   };
 
@@ -695,6 +756,9 @@
     gl.uniform1f(L.uLight, this.options.light ? 1 : 0);
     gl.uniform1f(L.uGridOn, this.options.grid ? 1 : 0);
     gl.uniform1f(L.uLandOn, this.options.land ? 1 : 0);
+    var terrainOn = this.options.terrain && this.terrainRec ? 1 : 0;
+    gl.uniform1f(L.uTerrainOn, terrainOn);
+    gl.uniform1f(L.uTerrainAmp, 0.05);
 
     var rec = this.current ? this.dataTex[this.current] : null;
     gl.uniform1f(L.uHasData, rec ? 1 : 0);
@@ -709,6 +773,9 @@
     gl.bindTexture(gl.TEXTURE_2D, this.landRec ? this.landRec.tex : this.dummyTex);
     gl.uniform1i(L.uLand, 2);
     gl.uniform1f(L.uHasLand, this.landRec ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, this.terrainRec ? this.terrainRec.tex : this.dummyTex);
+    gl.uniform1i(L.uTerrain, 3);
 
     gl.drawElements(gl.TRIANGLES, this.count, gl.UNSIGNED_SHORT, 0);
     gl.bindVertexArray(null);

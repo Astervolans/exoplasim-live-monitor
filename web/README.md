@@ -1,6 +1,6 @@
 # web/ — 行星模拟实时监控前端（零依赖）
 
-`index.html` + `app.js` + `i18n.js` + `globe.js` + `colormap.js` + `style.css`。桌面与手机（竖屏/横屏）自适应，支持触控拖动、双指缩放、点按读数。
+`index.html` + `app.js` + `i18n.js` + `globe.js` + `colormap.js` + `style.css`。桌面与手机（竖屏/横屏）自适应，支持触控拖动、双指缩放、点按读数；地形按钮用 `/api/land` 的 `oro` 做不成比例 3D 位移（默认关闭，`?terrain=1`）。
 没有构建步骤，不引第三方库/CDN。数据来自 collector 的 `/api/runs`、`/api/state`、`/api/frame`、`/api/land`（见 `../../CONTRACT.md`）。
 
 本地联调（用 fixture 回放）：
@@ -10,7 +10,7 @@ python monitor/test/mock_server.py --port 8790
 # 浏览器打开 http://127.0.0.1:8790/
 ```
 
-自检：`http://127.0.0.1:8790/?selftest=1`（当前 24 项，含 2 项语言检查 + 指针/触摸点按 + 陆地掩膜 + 更新时间颜色 + 无横向溢出）。
+自检：`http://127.0.0.1:8790/?selftest=1`（当前 25 项，含 2 项语言检查 + 指针/触摸点按 + 陆地掩膜 + 地形 + 更新时间颜色 + 无横向溢出）。
 
 ## Languages / 语言
 

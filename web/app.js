@@ -108,7 +108,7 @@
     lastFrameKey: null,
     layer: 'ts',
     unit: 'K',
-    opts: { light: true, grid: true, land: true, arrows: true },
+    opts: { light: true, grid: true, land: true, arrows: true, terrain: false },
     hover: null,          // 当前悬停采样 {lat,lon,model,idx,vals,col,row}
     hoverScreen: null,    // 屏幕坐标（CSS px，画布内）
     pinned: null,         // ?hover=<lat>,<lon> 固定浮层（显示系经纬度）
@@ -328,6 +328,9 @@
     if (qUnit === 'c' || qUnit === '°c' || qUnit === 'celsius') S.unit = 'C';
     else if (qUnit === 'k') S.unit = 'K';
     parsePinnedHover();
+    var qTerrain = QS.get('terrain');
+    if (qTerrain === '1') S.opts.terrain = true;
+    else if (qTerrain === '0') S.opts.terrain = false;
 
     initGlobe();
     buildLayerButtons();
@@ -382,7 +385,7 @@
         reduceMotion: REDUCED,
         autoRotate: !REDUCED
       });
-      globe.setOptions({ arrows: false });
+      globe.setOptions({ arrows: false, terrain: !!S.opts.terrain });
     } catch (err) {
       globe = null;
       els.glFallback.hidden = false;
@@ -870,8 +873,11 @@
       var buf = await res.arrayBuffer();
       if (tok !== S.tokens.land || run !== S.runId) return;
       var fr = parseExof(buf);
-      var lsm = fr.layers[fr.header.order[0]] || fr.layers.lsm;
+      var lsm = fr.layers.lsm || fr.layers[fr.header.order[0]];
+      var oro = fr.layers.oro || null;
       if (lsm) globe.setLand(lsm, fr.header.nlat, fr.header.nlon);
+      if (oro) globe.setTerrain(oro, fr.header.nlat, fr.header.nlon);
+      else globe.setTerrain(null, fr.header.nlat, fr.header.nlon);
     } catch (err) { /* 陆地可选，失败静默 */ }
   }
 
@@ -1778,12 +1784,14 @@
       t('st.gridMatch'), fr && st ? fr.header.nlat + '==' + st.grid.nlat : '—');
 
     var landOk = false, landDetail = t('st.failed');
+    var landOro = null;
     try {
       var lres = await fetch('/api/land?run=' + enc(S.runId || ''), { cache: 'no-store' });
       S.fetched.push('/api/land?run=' + (S.runId || ''));
       if (lres.ok) {
         var lfr = parseExof(await lres.arrayBuffer());
-        var lsm = lfr.layers[lfr.header.order[0]];
+        var lsm = lfr.layers.lsm || lfr.layers[lfr.header.order[0]];
+        landOro = lfr.layers.oro || null;
         if (lsm) {
           var ones = 0;
           for (var li = 0; li < lsm.length; li++) if (lsm[li] > 0.5) ones++;
@@ -1794,6 +1802,10 @@
       }
     } catch (e) { landOk = false; }
     add(landOk, t('st.land'), landDetail);
+    var oroMax = 0;
+    if (landOro) for (var oi = 0; oi < landOro.length; oi++) if (landOro[oi] > oroMax) oroMax = landOro[oi];
+    add(!!landOro && oroMax > 0, t('st.terrain'),
+      landOro ? ('m · max ' + Math.round(oroMax) + ' m') : t('st.noData'));
 
     // 指针悬停：模拟一次 pointermove，确认浮层真的出现（用户反馈回归）
     (function () {
