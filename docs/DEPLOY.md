@@ -200,7 +200,7 @@ Notes:
 | Collector exits when the launcher exits | This WSL kills background session children. Run the collector in a **foreground** `wsl.exe` (as `start.ps1` does) or keep the launching shell alive. |
 | `/api/state` is 0 frames forever, status `configuring` | The model is still compiling/configuring; check `/opt/exoplasim/logs/monitor_collector.log` and that `plasim_snapshot` appears in the workdir. |
 | Latest run shows 0 frames, log repeats `bad main header marker 0` / `131072` / `1033691254` | A freshly created `plasim_snapshot` had a zero/partial header. Current collector retries from offset 0 and clears the old header on every reset; if you run an older build, update/restart it. Regression test: `collector/selftest_rawburn.py`. |
-| Browser cannot reach the port | Confirm the collector binds `0.0.0.0`, test inside WSL with `curl http://127.0.0.1:8765/api/state`, then check Windows firewall / WSL localhost forwarding. |
+| Browser cannot reach the port | Confirm the collector binds `0.0.0.0`, test inside WSL with `curl http://127.0.0.1:<port>/api/state`, then check Windows firewall / WSL localhost forwarding. If the WSL log says `listening` but Windows gets `connection refused`, check `netsh interface ipv4 show excludedportrange protocol=tcp`: WSL/Hyper-V dynamically reserves ranges (e.g. 8695–8794) where forwarding cannot bind. `start.ps1` now detects this and picks a free port automatically. |
 | Wind layer is flat/zero | `pyfft` import failed (see log); other layers still work. |
 | Very high CPU | Reduce `--max-runs`, raise `--interval` (e.g. 2 s), or limit `--ring`. |
 | `*_crashed/` directories appear in the run list | The collector now ignores `*_crashed`; those are ExoPlaSim crash dumps, not live runs. |

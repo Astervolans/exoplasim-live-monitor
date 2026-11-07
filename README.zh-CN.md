@@ -33,7 +33,7 @@
 pwsh -NoProfile -File ".\monitor\start.ps1"
 ```
 
-打开 <http://127.0.0.1:8765/>。`start.ps1` 会自动发现 `/opt/exoplasim/runs` 下的 run，
+打开 `start.ps1` 打印的 URL（通常是 <http://127.0.0.1:8765/>；若 8765 落在 Windows 的 WSL/Hyper-V 保留端口范围，会自动改用 8665 等并给出警告）。它会自动发现 `/opt/exoplasim/runs` 下的 run，
 等 API 就绪后打开浏览器。
 
 | 参数 | 作用 |
@@ -62,7 +62,7 @@ pwsh -NoProfile -File ".\monitor\start.ps1" -Lan
 [lan] 局域网/手机访问： http://192.168.137.1:8765/
 ```
 
-手机连接电脑热点（或同一局域网）后打开该地址。WSL2 的 IP 在 `wsl --shutdown` 后会变化，重启 WSL 后
+手机连接电脑热点（或同一局域网）后打开该地址。脚本使用 `start.ps1` 最终选定的端口（含自动回退），请以打印的 URL 为准。WSL2 的 IP 在 `wsl --shutdown` 后会变化，重启 WSL 后
 重新运行 `start.ps1 -Lan` 即可；`-LanRemove` 清理规则。该脚本只暴露 collector 端口，监控本身仍是只读的。
 
 还没有模拟？先跑一个 **6 个模拟月** 的测试算例（8 进程约 40 s）：

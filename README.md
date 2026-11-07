@@ -41,7 +41,7 @@ English UI (`?lang=en`) and Celsius mode:
 pwsh -NoProfile -File ".\monitor\start.ps1"
 ```
 
-Then open <http://127.0.0.1:8765/>. `start.ps1` auto-discovers runs under
+Then open the URL printed by `start.ps1` (normally <http://127.0.0.1:8765/>; if Windows has 8765 in a WSL/Hyper-V reserved port range it automatically falls back, e.g. 8665, and warns). It auto-discovers runs under
 `/opt/exoplasim/runs`, waits for the API, and opens the browser.
 
 | Flag | Meaning |
@@ -72,7 +72,7 @@ It prints the URL, for example:
 [lan] 局域网/手机访问： http://192.168.137.1:8765/
 ```
 
-Use that address on the phone (connect it to the computer's mobile hotspot or the same LAN).
+Use that address on the phone (connect it to the computer's mobile hotspot or the same LAN). The helper uses the same port chosen by `start.ps1` (including the automatic fallback), so always use the printed URL.
 WSL2's IP changes after `wsl --shutdown`, so re-run `start.ps1 -Lan` (or `expose_lan.ps1`)
 after a WSL restart. `-LanRemove` cleans up. The script only exposes the collector port; the
 monitor itself stays read-only.

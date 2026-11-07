@@ -36,6 +36,49 @@ $UnixHere = '/mnt/' + $Here.Substring(0, 1).ToLower() + $Here.Substring(2).Repla
 $Launch = "$UnixHere/launch_collector.sh"
 $LogWin = Join-Path $Here 'collector.log'
 $LogWsl = '/opt/exoplasim/logs/monitor_collector.log'
+
+function Get-ExcludedTcpRanges {
+    $ranges = @()
+    try {
+        $lines = & netsh.exe interface ipv4 show excludedportrange protocol=tcp 2>$null
+        foreach ($line in $lines) {
+            if ($line -match '^\s*(\d+)\s+(\d+)\s*$') {
+                $ranges += , @([int]$Matches[1], [int]$Matches[2])
+            }
+        }
+    } catch { }
+    return $ranges
+}
+
+function Test-PortExcluded {
+    param([int]$Candidate, $Ranges)
+    foreach ($r in $Ranges) {
+        if ($Candidate -ge $r[0] -and $Candidate -le $r[1]) { return $true }
+    }
+    return $false
+}
+
+# WSL/Hyper-V 会动态保留一段 Windows TCP 端口（如 8695-8794）。
+# 落在排除区的端口无法被 WSL localhost 转发或 portproxy 绑定，表现为
+# collector 在 WSL 里 listening、Windows 却 connection refused。
+function Resolve-MonitorPort {
+    param([int]$Preferred)
+    $ranges = Get-ExcludedTcpRanges
+    if (-not (Test-PortExcluded $Preferred $ranges)) { return $Preferred }
+    $candidates = @(8665, 8666, 8667, 8668, 8669, 8670, 8600, 8601, 8602, 8603,
+                    8080, 8090, 9099, 9100)
+    foreach ($candidate in $candidates) {
+        if (Test-PortExcluded $candidate $ranges) { continue }
+        $busy = Get-NetTCPConnection -State Listen -LocalPort $candidate -ErrorAction SilentlyContinue
+        if ($busy) { continue }
+        Write-Warning "[monitor] 端口 $Preferred 在 Windows 的 TCP 排除范围（WSL/Hyper-V 动态保留），改用 $candidate；请使用本脚本打印的 URL"
+        return $candidate
+    }
+    Write-Warning "[monitor] 端口 $Preferred 被 Windows 排除，且找不到可替代端口；请手动指定 -Port"
+    return $Preferred
+}
+
+$Port = Resolve-MonitorPort $Port
 $Url = "http://127.0.0.1:$Port/"
 
 function ConvertTo-WslPath {
