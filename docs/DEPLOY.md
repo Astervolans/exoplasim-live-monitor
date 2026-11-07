@@ -224,8 +224,14 @@ http://127.0.0.1:8765/?selftest=1
 
 ## 8. Performance notes
 
-* The collector polls once per second and reads only appended bytes; typical CPU is
-  **0.2–1 % of one core per active run** (≈2 ms poll, ≈100 MB RSS).
+* The collector is **mtime-adaptive**: the frame period is measured from the raw file's
+  `mtime`, and the idle poll is `clamp(period/4, 1 s, 30 s)`. A `mtime` change wakes the
+  collector on the next 1 s tick, so a new snapshot is shown within ~1 s even though the
+  idle interval can be much longer. `--no-adaptive` restores a fixed `--interval`;
+  `--max-interval` caps the idle period.
+* Reads are chunked (8 MiB, ≤64 MiB per poll); a 493 MB T85 snapshot settles at
+  ≈355 MB RSS instead of ≈540 MB. Typical CPU is **0.2–1 % of one core per active run**
+  (≈2 ms poll on T21, ≈35 ms when a T85 frame is built).
 * The API returns 9 float32 layers on a 64×128 grid (T21) per frame; this is ~300 KB
   per update and is not a bottleneck on localhost.
 * Keep the ring at its default 48 frames/run unless memory-constrained.

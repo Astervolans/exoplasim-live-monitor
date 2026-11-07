@@ -101,6 +101,12 @@ Windows 浏览器  ──HTTP──>  127.0.0.1:8765  (WSL2 内 python, /opt/exo
     "planned_months": 6,             // 计划总模拟月数；未知为 null
     "planned_years": 0.5,            // planned_months/12；整年跑时为整数
     "months_done": 1.5,              // year_index*12 + 当前年已过月数
+    "poll_interval_s": 8.5,          // 当前空闲轮询周期（mtime 变化会立即触发，不等它）
+    "frame_period_s": 34.1,          // 上一帧→当前帧的 raw 文件 mtime 差（秒）
+    "frame_period_median_s": 34.0,   // 最近若干帧 mtime 间隔中位数
+    "frame_period_est_s": 33.8,      // 按模型进度估算的帧周期（无实测时兜底）
+    "frame_period_source": "mtime",  // mtime（文件生成时间实测）/ estimated
+    "frame_rate_per_hour": 105.6,    // 3600/帧周期，可为 null
     "progress": 0.25,                // 0..1，相对 planned_months
     "eta_s": 26.0,
     "sim_day": 45.0,                 // 该"年"内第几天（360 天/年）

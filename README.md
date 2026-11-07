@@ -17,6 +17,10 @@ without touching the model process.
 * **Any resolution** — T21/T42/T85 raw snapshots (64×128 … 256×512) are parsed
   generically; a live 32-rank T85 run with a 493 MB snapshot produced 25 frames.
 * **Bilingual UI** — 中文 / English toggle (`?lang=en`).
+* **Adaptive polling** — the frame period is measured from the raw file's `mtime`
+  (snapshot generation time). Idle runs poll up to 30 s apart, but a `mtime` change
+  wakes the collector on the next 1 s tick, so new frames still appear immediately.
+  T85 (32 ranks, 256×512) runs at ≈1–1.5 % CPU / ≈300 MB RSS.
 * **PC + phone** — responsive layout for desktop and portrait/landscape phones; touch
   drag, pinch zoom and tap-to-read; works over the local network / hotspot.
 * **Zero dependencies** — hand-written WebGL2 globe; no npm, no CDN, no three.js.
@@ -186,6 +190,7 @@ HTTP API (see [CONTRACT.md](CONTRACT.md)):
 | Phone layout | iPhone-14 emulation 390×844 + landscape 844×390: no horizontal overflow, tap readout, pinch/zoom buttons; screenshots above |
 | LAN access | `start.ps1 -Lan` → port proxy + `LocalSubnet` firewall rule; `http://192.168.137.1:8765/` returns 200 from the host; `-LanRemove` cleans up |
 | Raw header recovery | `collector/selftest_rawburn.py`: zero prefix → valid header → truncate → rewrite, **ALL PASS**; a live T85 (256×512, 493 MB) run lists 25 frames |
+| Adaptive polling | T85 frame period ≈30–40 s → idle poll ≈9 s (cap 30 s); a 105 s probe measured the next frame within ≤0.5 s of the raw file's `mtime` change. CPU ≈1–1.5 %, RSS ≈300 MB (chunked reads). `--no-adaptive` restores fixed `--interval` |
 
 This repository also keeps a small harness for fast iteration:
 

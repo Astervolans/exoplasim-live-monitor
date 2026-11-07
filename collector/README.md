@@ -132,6 +132,25 @@ tr = 178+179`；`spd = hypot(u,v)`。
 回归测试：`python collector/selftest_rawburn.py`（用真实 T85 前缀模拟 0 开头 → 正常 →
 截断 → 重写，ALL PASS）。实测 T85（256×128 谱，32 ranks，493 MB raw）可直接解析出 25 帧。
 
+## 自适应轮询（快照文件 mtime）
+
+高分辨率 T85 的 raw 只在写帧时 burst 更新 `mtime`，静止时几乎不变。collector 用这个
+「文件生成时间」做两件事：
+
+1. **统计帧间隔**：每帧完成时记下 raw 的 `mtime`，相邻帧 mtime 差即该帧的生成时间
+   （`<0.5 s` 的 backlog 批解析帧会被过滤）；`/api/state` 暴露
+   `frame_period_s` / `frame_period_median_s` / `frame_period_est_s` /
+   `frame_period_source`（`mtime` 或 `estimated`）/ `frame_rate_per_hour`。
+2. **决定轮询周期**：`poll_interval = clamp(mtime_median / 4, --interval, --max-interval)`。
+   T21 约 5 s/帧 → ~1.25 s；T85 约 30–40 s/帧 → ~9 s（上限 30 s）。
+
+**即时显示**：主循环仍是 1 s tick，但每 tick 只 `stat` 一次；`mtime` 一变就立刻
+强制 poll（不等 `next_poll_at`）。所以“空闲轮询 8.5 s”不会变成新帧延迟：105 s 探针
+实测新帧在 mtime 变化后 ≤0.5 s 内出现。`--no-adaptive` 可退回固定 `--interval`。
+
+**内存**：首次遇到大文件时按 8 MiB 分块读、单次 poll 最多 64 MiB，避免一次性把
+493 MB raw 读进内存；T85 RSS 从 ~540 MB 降到 ~300 MB（主要仍是 48 帧 ring + Python）。
+
 ## 已知限制
 
 1. **风场依赖 `--no-physfilter` 才能与归档 npz 精确对齐**：pyburn 归档默认

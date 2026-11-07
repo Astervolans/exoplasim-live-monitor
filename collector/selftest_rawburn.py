@@ -92,7 +92,11 @@ def main():
               % (stream.nlon, stream.nlat, stream.nlev, stream.ntru))
         check(stream.nlon >= 32 and stream.nlat >= 16 and stream.nlev >= 1,
               "header 维度合理")
-        check(bool(frames1), "至少发布 1 帧（实际 %d）" % len(frames1))
+        if not frames1:
+            print("SKIP: 前缀 %.0f MiB 还没有完整帧，请加大 --prefix-mb（默认 40）"
+                  % (len(prefix) / 1048576.0))
+            return 2
+        check(True, "至少发布 1 帧（实际 %d）" % len(frames1))
 
         # 3) 文件被截断：清状态
         with open(raw, "wb"):

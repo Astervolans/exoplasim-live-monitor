@@ -98,6 +98,10 @@
       'kv.elapsed': '已运行',
       'kv.eta': 'ETA',
       'kv.frames': '帧数',
+      'kv.framePeriod': '快照间隔',
+      'kv.framePeriodObserved': '{last}（中位 {median}）',
+      'kv.framePeriodEstimated': '≈ {est}（估算）',
+      'kv.pollInterval': '轮询周期',
       'kv.overhead': '监控开销',
       'kv.status': '状态',
 
@@ -336,6 +340,10 @@
       'kv.elapsed': 'Elapsed',
       'kv.eta': 'ETA',
       'kv.frames': 'Frames',
+      'kv.framePeriod': 'Frame interval',
+      'kv.framePeriodObserved': '{last} (median {median})',
+      'kv.framePeriodEstimated': '≈ {est} (estimated)',
+      'kv.pollInterval': 'Poll interval',
       'kv.overhead': 'Monitor overhead',
       'kv.status': 'Status',
 

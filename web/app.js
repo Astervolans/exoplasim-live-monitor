@@ -687,6 +687,13 @@
     return t('kv.simDateValue', { y: y, m: month, d: day });
   }
 
+  function fmtSecondsShort(v) {
+    if (v === null || v === undefined || !isFinite(v)) return '—';
+    if (v >= 3600) return (v / 3600).toFixed(v >= 36000 ? 0 : 1) + ' h';
+    if (v >= 60) return (v / 60).toFixed(v >= 600 ? 0 : 1) + ' min';
+    return (Math.round(v * 10) / 10) + ' s';
+  }
+
   function renderProgress(st) {
     var run = st.run || {};
     var pct = typeof run.progress === 'number' ? run.progress : null;
@@ -702,6 +709,17 @@
       yearVal = run.year_total ? t('kv.yearValue', { y: run.year_no, total: run.year_total })
         : t('kv.yearSolo', { y: run.year_no });
     }
+    var periodTxt = '—';
+    if ((run.frame_period_source === 'mtime' || run.frame_period_source === 'observed')
+        && run.frame_period_median_s) {
+      periodTxt = t('kv.framePeriodObserved', {
+        last: fmtSecondsShort(run.frame_period_s),
+        median: fmtSecondsShort(run.frame_period_median_s)
+      });
+    } else if (run.frame_period_est_s) {
+      periodTxt = t('kv.framePeriodEstimated', { est: fmtSecondsShort(run.frame_period_est_s) });
+    }
+    var pollTxt = run.poll_interval_s ? fmtSecondsShort(run.poll_interval_s) : '—';
     var rows = [
       [t('kv.simDate'), fmtSimDate(run.year_no, simDayOf(run, st))],
       [t('kv.year'), yearVal],
@@ -713,6 +731,8 @@
       [t('kv.elapsed'), fmtDur(run.wall_elapsed_s)],
       [t('kv.eta'), run.eta_s === null || run.eta_s === undefined ? t('common.unknown') : fmtDur(run.eta_s)],
       [t('kv.frames'), run.frames_total === undefined || run.frames_total === null ? '—' : String(run.frames_total)],
+      [t('kv.framePeriod'), periodTxt],
+      [t('kv.pollInterval'), pollTxt],
       [t('kv.overhead'), serverMetaText(st.server)]
     ];
     var html = '';

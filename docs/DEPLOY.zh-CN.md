@@ -209,8 +209,13 @@ pwsh -NoProfile -File ".\monitor\start.ps1" -Lan
 
 ## 8. 性能提示
 
-* collector 每秒轮询一次、只读新追加字节；每个活跃 run 典型 CPU 为单核 **0.2–1 %**
-  （轮询约 2 ms，RSS ≈100 MB）。
+* collector 是 **mtime 自适应**的：帧周期从 raw 文件的 `mtime` 统计，空闲轮询周期为
+  `clamp(周期/4, 1 s, 30 s)`。`mtime` 一变，下一个 1 s tick 会立即唤醒 collector，所以
+  即使空闲周期是 30 s，新快照也能在约 1 s 内显示。`--no-adaptive` 可改回固定 `--interval`，
+  `--max-interval` 控制空闲上限。
+* 读文件按 8 MiB 分块、单次 poll 最多 64 MiB；493 MB 的 T85 快照稳定在约 355 MB RSS
+  （旧版一次性读会到 ~540 MB）。典型 CPU 为单核 **0.2–1 %**（T21 每次 poll 约 2 ms，
+  T85 每建一帧约 35 ms）。
 * 每帧 API 返回 9 个 float32 图层（T21 统一网格 64×128，约 300 KB），localhost 上完全不是瓶颈。
 * 默认 ring buffer 48 帧/run；内存紧张时再调小。
 * 监控端**绝不**跑 burn7/后处理，只读 raw 文件。

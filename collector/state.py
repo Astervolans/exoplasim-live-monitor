@@ -599,6 +599,65 @@ def frame_stats_extra(unified):
 
 
 # ---------------------------------------------------------------- 进度
+def frame_period_stats(intervals=None, wall_elapsed_s=None, months_done=None,
+                       months_per_frame=0.5):
+    """快照产生周期统计（秒）。
+
+    ``intervals``：快照文件 mtime 的相邻差（秒，已在 RunMonitor 里过滤掉
+    同一批 backlog 解析出的 <0.5 s 间隔）；``wall_elapsed/months_done`` 是模型
+    自身的时间进度，用来估算「模型多久产出一帧」。
+
+    返回 dict：
+      * ``last_s`` / ``median_s``：实测的上一次/中位间隔（可能为 None）；
+      * ``est_s``：按模型进度估算的间隔（可能为 None）；
+      * ``period_s``：自适应轮询采用值（优先实测中位，其次估算）；
+      * ``source``：``mtime``（文件生成时间实测）/ ``estimated`` / ``unknown``；
+      * ``samples``：参与统计的实测样本数。
+    """
+    vals = sorted(float(v) for v in (intervals or []) if v and v > 0)
+    last_s = round(float(intervals[-1]), 2) if intervals else None
+    median_s = round(vals[len(vals) // 2], 2) if vals else None
+    est_s = None
+    try:
+        if wall_elapsed_s and months_done and months_done > 0:
+            est = float(wall_elapsed_s) / float(months_done) * float(months_per_frame or 0.5)
+            if est > 0:
+                est_s = round(est, 2)
+    except (TypeError, ValueError, ZeroDivisionError):
+        est_s = None
+    if median_s and median_s > 0:
+        return {"last_s": last_s, "median_s": median_s, "est_s": est_s,
+                "period_s": median_s, "source": "mtime", "samples": len(vals)}
+    if est_s:
+        return {"last_s": last_s, "median_s": median_s, "est_s": est_s,
+                "period_s": est_s, "source": "estimated", "samples": len(vals)}
+    return {"last_s": last_s, "median_s": median_s, "est_s": est_s,
+            "period_s": None, "source": "unknown", "samples": len(vals)}
+
+
+def adaptive_poll_interval(base_interval, max_interval, frame_period_s=None,
+                           has_frames=False, finished=False):
+    """按快照产出周期自适应轮询周期（秒）。
+
+    ``poll = clamp(frame_period / 4, base, max)``：
+
+    * 无帧 / 未知周期 → base（默认 1 s，尽快看到首帧）；
+    * 已结束 → max（没有新帧）；
+    * T21 帧约 5 s → 1.25 s；T85 帧约 30 s → 封顶 max（默认 5 s），
+      新快照出现后最多 ``max_interval`` 秒内显示。
+
+    取周期 1/4 是为了在「帧间隔抖动/变快」时仍能及时命中；最大间隔给用户
+    一个明确的延迟上限（可用 ``--max-interval`` 调小/调大）。
+    """
+    base = max(0.2, float(base_interval or 1.0))
+    top = max(base, float(max_interval or base))
+    if finished:
+        return top
+    if not has_frames or not frame_period_s or frame_period_s <= 0:
+        return base
+    return min(top, max(base, float(frame_period_s) / 4.0))
+
+
 def progress_info(step, params, raw_params, wall_elapsed_s, frames_total=0,
                   year_index=0, active=True):
     """由「当前帧所属年份 + 该帧 step」推年/月/日、months_done、progress、ETA。

@@ -169,6 +169,23 @@ def main():
                                    year_index=0, active=False)
         check(prog["months_done"] == 6.0, "6 个月短跑结束仍报 6.0")
 
+        print("\n== 快照周期统计 / 自适应轮询 ==")
+        st = state.frame_period_stats([5.0, 6.0, 5.5], 64, 6, 0.5)
+        check(st["median_s"] == 5.5 and st["source"] == "mtime",
+              "实测中位 5.5 s（实际 %s）" % st)
+        st2 = state.frame_period_stats([], 64, 6, 0.5)
+        check(st2["source"] == "estimated" and st2["est_s"] == 5.33,
+              "无实测时按模型进度估算（实际 %s）" % st2["est_s"])
+        check(state.adaptive_poll_interval(1, 5, has_frames=False) == 1.0,
+              "无帧 → 基础 1 s")
+        ti = state.adaptive_poll_interval(1, 5, frame_period_s=5.5, has_frames=True)
+        check(ti == 1.375, "T21 5.5 s/帧 → 1.375 s（实际 %s）" % ti)
+        ti = state.adaptive_poll_interval(1, 5, frame_period_s=30, has_frames=True)
+        check(ti == 5.0, "T85 30 s/帧 → 封顶 5 s（实际 %s）" % ti)
+        check(state.adaptive_poll_interval(1, 5, frame_period_s=30, has_frames=True,
+                                           finished=True) == 5.0,
+              "已结束 → 5 s")
+
         print("\n== sit 图层 ==")
         check("sit" in state.FRAME_ORDER, "FRAME_ORDER 含 sit")
         check(len(state.FRAME_ORDER) == 9, "EXOF 9 层（实际 %d）" % len(state.FRAME_ORDER))

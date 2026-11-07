@@ -68,7 +68,7 @@ WIND_CODES = (155, 138)
 class RawFrame:
     """一条 step 的原始变量集合（未重采样）。"""
 
-    __slots__ = ("step", "date_code", "time_code", "grid", "spectral", "wall", "source_size")
+    __slots__ = ("step", "date_code", "time_code", "grid", "spectral", "wall", "source_size", "mtime")
 
     def __init__(self, step):
         self.step = int(step)
@@ -78,6 +78,7 @@ class RawFrame:
         self.spectral = {}   # code -> {lev: float32(2*NCSP,)}
         self.wall = time.time()
         self.source_size = 0
+        self.mtime = 0.0           # 文件 mtime（快照生成时间，供周期统计）
 
     def has_wind(self):
         return all(code in self.spectral and self.spectral[code] for code in WIND_CODES)
@@ -105,6 +106,8 @@ class BurnStream:
 
     #: 文件静止多少轮（poll）后认为当前 step 已写完（1 Hz 轮询下约 2 秒）
     IDLE_FLUSH_POLLS = 2
+    READ_CHUNK = 8 * 1024 * 1024          # 单次 read 分块
+    MAX_READ_PER_POLL = 64 * 1024 * 1024  # 单次 poll 最多处理 64 MiB
 
     def __init__(self, log=None):
         self._log = log or (lambda msg: None)
@@ -123,12 +126,16 @@ class BurnStream:
         self.reset_count = 0
         self.idle = 0
         self.last_size = 0
+        self.last_mtime = 0.0
+        self.last_mtime_ns = 0
         self.bytes_read = 0
         self.frames_parsed = 0
         self._pending = None         # RawFrame 正在拼装
         self._done_step = None       # 最近一次已发布的 step（忽略其后到达的收尾记录）
         self._scratch = b""
         self._bad_header = 0         # 连续看到「文件头不是 32」的轮次数（用于降噪日志）
+        self._catching_up = False    # 本次 poll 是否还没读完文件（首次/大 backlog）
+        self._backlog = False        # 本次要读的字节超过单次预算（统计周期时要跳过）
 
     # ------------------------------------------------------------------ 状态
     @property
@@ -205,18 +212,37 @@ class BurnStream:
 
         size = st.st_size
         self.last_size = size
+        self.last_mtime = st.st_mtime
+        self.last_mtime_ns = st.st_mtime_ns
         if size > self.offset:
+            # 分块读：T85 的 raw 可到数 GB，一次性 read() 会把 RSS 顶到 ~500 MB+。
+            # 每块 8 MiB、单次 poll 最多 64 MiB；没追平就下一轮继续（_catching_up）。
+            budget = self.MAX_READ_PER_POLL
+            self._backlog = (size - self.offset) > budget
             try:
                 with open(path, "rb") as handle:
-                    handle.seek(self.offset)
-                    chunk = handle.read(size - self.offset)
+                    while size > self.offset and budget > 0:
+                        want = min(size - self.offset, self.READ_CHUNK, budget)
+                        handle.seek(self.offset)
+                        chunk = handle.read(want)
+                        if not chunk:
+                            break
+                        before = self.offset
+                        self.bytes_read += len(chunk)
+                        self.idle = 0
+                        events.extend(self._consume(chunk))
+                        budget -= len(chunk)
+                        if self.offset <= before:
+                            break          # 文件头重置/没有任何前进，避免死循环
             except OSError as exc:
                 self._log("read failed: %s" % exc)
                 return events
-            self.bytes_read += len(chunk)
-            self.idle = 0
-            events.extend(self._consume(chunk))
+            # 只有「还有明显一大段没读」才算积压；文件尾部半条 record 属于正常情况，
+            # 否则 T85 这种持续写入的文件会永远被判成 catching_up，轮询卡在 1 s。
+            self._catching_up = (size - self.offset) > self.READ_CHUNK
         else:
+            self._catching_up = False
+            self._backlog = False
             self.idle += 1
             if (self._pending is not None and self._pending.grid
                     and self.idle >= self.IDLE_FLUSH_POLLS):
@@ -415,6 +441,7 @@ class BurnStream:
         self.frames_parsed += 1
         frame.source_size = self.last_size
         frame.wall = time.time()
+        frame.mtime = self.last_mtime or frame.wall
         return frame
 
 

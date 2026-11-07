@@ -93,12 +93,21 @@ class RunMonitor:
     """一个运行目录的解析器 + 状态机 + ring buffer。"""
 
     def __init__(self, run_id, workdir, modelname, spec=None, physfilter=True,
-                 ring=state.RING_FRAMES):
+                 ring=state.RING_FRAMES, base_interval=1.0, max_interval=30.0,
+                 adaptive=True):
         self.run_id = run_id
         self.workdir = workdir
         self.modelname = modelname or run_id
         self.spec = spec or {}
         self.physfilter = bool(physfilter)
+        self.base_interval = max(0.2, float(base_interval or 1.0))
+        self.max_interval = max(self.base_interval, float(max_interval or self.base_interval))
+        self.adaptive = bool(adaptive)
+        self.poll_interval = self.base_interval
+        self.next_poll_at = 0.0
+        self.frame_intervals = []    # 快照文件 mtime 的相邻差（秒，过滤 backlog）
+        self._last_frame_mtime = None
+        self._seen_mtime_ns = None   # 已读到的文件 mtime；变化时立即 poll（即时显示）
         self.stream = rawburn.BurnStream(log=lambda msg: LOG.info("[%s] %s", run_id, msg))
         self.frames = state.FrameStore(ring)
         self.params = {}
@@ -327,6 +336,21 @@ class RunMonitor:
                                        year_index=year, active=True)
         frame.sim_date = progress["sim_date"]
         self.frames.add(frame)
+        skip_stats = bool(getattr(self.stream, "_backlog", False)
+                          or getattr(self.stream, "_catching_up", False))
+        # 快照周期优先用「文件生成时间」：raw 只在写帧时 burst 更新 mtime，
+        # 用解析时刻 now 会被轮询间隔/backlog 污染。
+        mtime = float(getattr(raw, "mtime", 0.0) or now)
+        if skip_stats:
+            self._last_frame_mtime = None
+        elif self._last_frame_mtime is None:
+            self._last_frame_mtime = mtime
+        else:
+            delta = mtime - self._last_frame_mtime
+            if 0.5 <= delta <= 6 * 3600:
+                self.frame_intervals.append(round(delta, 2))
+                self.frame_intervals = self.frame_intervals[-12:]
+            self._last_frame_mtime = mtime
         self.last_update = now
         self.status = "running"
         LOG.info("[%s] frame #%d year=%d step=%d ts_mean=%.2fK (%d frames)",
@@ -373,6 +397,69 @@ class RunMonitor:
     def latest(self):
         return self.frames.latest
 
+    def months_per_frame(self):
+        steps_per_year = self.raw_params.get("physical_year_steps") or 17280
+        nstps = self.raw_params.get("nstps") or 720
+        try:
+            return float(nstps) / (float(steps_per_year) / 12.0)
+        except (TypeError, ValueError, ZeroDivisionError):
+            return 0.5
+
+    def frame_period_stats(self, now=None):
+        """快照产出周期统计（实测优先，模型进度估算兜底）。"""
+        prog = self.progress(now)
+        return state.frame_period_stats(
+            self.frame_intervals, self.wall_elapsed(now),
+            prog.get("months_done"), self.months_per_frame())
+
+    def adaptive_interval(self, now=None):
+        """按本 run 的历史快照周期给出下一次轮询间隔（秒）。"""
+        if not self.adaptive:
+            return self.base_interval
+        if getattr(self.stream, "_catching_up", False):
+            return self.base_interval       # 首次/积压，先追平文件
+        stats = self.frame_period_stats(now)
+        return state.adaptive_poll_interval(
+            self.base_interval, self.max_interval,
+            frame_period_s=stats.get("period_s"),
+            has_frames=self.frames.total > 0,
+            finished=self.status == "finished",
+        )
+
+    def poll_due(self, now=None, force=False):
+        """到点（或 force）才轮询；返回是否真的执行了一次 poll。"""
+        now = now or time.time()
+        if not force and now < self.next_poll_at:
+            return False
+        try:
+            self.poll(now)
+        finally:
+            self._seen_mtime_ns = getattr(self.stream, "last_mtime_ns", None)
+            self.poll_interval = self.adaptive_interval(now)
+            self.next_poll_at = now + self.poll_interval
+        return True
+
+    def maybe_poll(self, now=None):
+        """mtime 变化立即轮询（新快照即时显示），否则按自适应周期兜底。
+
+        高分辨率 T85 的 raw 只在写帧时 burst 更新 mtime：静止时不需要高频
+        stat+read，周期可以放到 max_interval；一旦开始写，下一 tick（默认 1 s）
+        就会捕获 mtime 变化并立刻解析，新帧不会等 30 s。
+        """
+        now = now or time.time()
+        if now >= self.next_poll_at:
+            return self.poll_due(now)
+        path = getattr(self.stream, "path", None)
+        if not path:
+            return False
+        try:
+            mtime_ns = os.stat(path).st_mtime_ns
+        except OSError:
+            return False
+        if self._seen_mtime_ns is None or mtime_ns != self._seen_mtime_ns:
+            return self.poll_due(now, force=True)
+        return False
+
     def progress(self, now=None):
         frame = self.latest()
         # 进度必须以「最新帧所属年份」为准，而不是磁盘上已完成的年数：
@@ -411,6 +498,7 @@ class RunMonitor:
 
     def runs_entry(self, now=None):
         prog = self.progress(now)
+        fps = self.frame_period_stats(now)
         return {
             "run_id": self.run_id,
             "modelname": self.modelname,
@@ -420,6 +508,13 @@ class RunMonitor:
             "year_index": prog["year_index"],
             "year_no": prog["year_no"],
             "completed_years": self.year_index,
+            "poll_interval_s": round(self.poll_interval, 2),
+            "frame_period_s": fps["last_s"],
+            "frame_period_median_s": fps["median_s"],
+            "frame_period_est_s": fps["est_s"],
+            "frame_period_source": fps["source"],
+            "frame_rate_per_hour": (round(3600.0 / fps["period_s"], 2)
+                                    if fps.get("period_s") else None),
             "months_done": prog["months_done"],
             "planned_months": self.params.get("planned_months"),
             "planned_years": self.params.get("planned_years"),
@@ -456,6 +551,7 @@ class RunMonitor:
             item["min"] = entry["min"] if entry else None
             item["max"] = entry["max"] if entry else None
             layers[name] = item
+        fps = self.frame_period_stats(now)
         run_block = {
             "run_id": self.run_id,
             "modelname": self.modelname,
@@ -467,6 +563,14 @@ class RunMonitor:
             "year_index": prog["year_index"],
             "year_no": prog["year_no"],
             "completed_years": self.year_index,
+            "poll_interval_s": round(self.poll_interval, 2),
+            "frame_period_s": fps["last_s"],
+            "frame_period_median_s": fps["median_s"],
+            "frame_period_est_s": fps["est_s"],
+            "frame_period_source": fps["source"],
+            "frame_period_samples": fps["samples"],
+            "frame_rate_per_hour": (round(3600.0 / fps["period_s"], 2)
+                                    if fps.get("period_s") else None),
             "restart_year": self.params.get("restart_year"),
             "year_total": self.params.get("year_total"),
             "frames_total": self.frames.total,
@@ -571,6 +675,9 @@ class Monitor:
                     modelname=entry.modelname,
                     spec=self.spec,
                     physfilter=self.args.physfilter,
+                    base_interval=self.args.interval,
+                    max_interval=self.args.max_interval,
+                    adaptive=not self.args.no_adaptive,
                 )
                 run.outdir = self.args.outdir
                 self.runs[entry.run_id] = run
@@ -584,7 +691,10 @@ class Monitor:
             if run_id not in self.runs:
                 run = RunMonitor(run_id, os.path.abspath(self.args.workdir),
                                  discovery.modelname_of(self.args.workdir),
-                                 spec=self.spec, physfilter=self.args.physfilter)
+                                 spec=self.spec, physfilter=self.args.physfilter,
+                                 base_interval=self.args.interval,
+                                 max_interval=self.args.max_interval,
+                                 adaptive=not self.args.no_adaptive)
                 run.outdir = self.args.outdir
                 self.runs[run_id] = run
                 self.order.append(run_id)
@@ -600,22 +710,32 @@ class Monitor:
                 except Exception:  # noqa: BLE001
                     LOG.exception("discovery failed")
                 self.discovered_at = now
+            polled = False
+            started = time.perf_counter()
             for run in list(self.runs.values()):
                 try:
-                    run.poll(now)
+                    polled = run.maybe_poll(now) or polled
                 except Exception as exc:  # noqa: BLE001
                     run.msg = "poll error: %s" % exc
+                    run.poll_interval = run.base_interval
+                    run.next_poll_at = now + run.base_interval
                     LOG.exception("[%s] poll failed", run.run_id)
+                polled = True
+            if polled:
+                self.poll_ms = (time.perf_counter() - started) * 1000.0
             self._update_self_stats()
 
     def _update_self_stats(self):
         ticks = _self_cpu_ticks()
         now = time.time()
         last_ticks, last_time = self._cpu_last
+        # 5 s 窗口平均，避免把「建一帧」的瞬时 100 ms 显示成 10% CPU
         if ticks is not None and last_ticks is not None and now > last_time + 1e-6:
-            delta = (ticks - last_ticks) / float(CLK_TCK)
-            self.cpu_percent = max(0.0, delta / (now - last_time) * 100.0)
-        self._cpu_last = (ticks, now)
+            elapsed = now - last_time
+            if elapsed >= 5.0:
+                delta = (ticks - last_ticks) / float(CLK_TCK)
+                self.cpu_percent = max(0.0, delta / elapsed * 100.0)
+                self._cpu_last = (ticks, now)
         self.rss_kib = _self_rss_kib()
         self.frames_parsed = sum(run.stream.frames_parsed for run in self.runs.values())
         self.bytes_read = sum(run.stream.bytes_read for run in self.runs.values())
@@ -650,6 +770,8 @@ class Monitor:
             "rss_kib": self.rss_kib,
             "uptime_s": round(time.time() - self.start_time, 1),
             "poll_ms": round(self.poll_ms, 2),
+            "adaptive": bool(not self.args.no_adaptive),
+            "max_interval_s": round(float(self.args.max_interval), 1),
             "frames_parsed": self.frames_parsed,
             "bytes_read": self.bytes_read,
         }
@@ -832,7 +954,12 @@ def parse_args(argv=None):
     parser.add_argument("--spec", default=None, help="额外 spec.json（参数兜底）")
     parser.add_argument("--web", default=None,
                         help="静态目录，默认 <collector>/../web")
-    parser.add_argument("--interval", type=float, default=1.0, help="轮询周期（秒）")
+    parser.add_argument("--interval", type=float, default=1.0,
+                        help="基础/最快轮询周期（秒）")
+    parser.add_argument("--max-interval", type=float, default=30.0,
+                        help="空闲时的最慢轮询周期（秒）；mtime 变化会立即触发")
+    parser.add_argument("--no-adaptive", action="store_true",
+                        help="关闭自适应轮询，始终按 --interval")
     parser.add_argument("--discover-interval", type=float, default=2.0,
                         help="目录发现周期（秒）")
     parser.add_argument("--recent-minutes", type=float,
@@ -898,9 +1025,7 @@ def main(argv=None):
     next_tick = time.monotonic()
     try:
         while True:
-            started = time.perf_counter()
             monitor.poll_all()
-            monitor.poll_ms = (time.perf_counter() - started) * 1000.0
             next_tick += interval
             sleep = next_tick - time.monotonic()
             if sleep > 0:
