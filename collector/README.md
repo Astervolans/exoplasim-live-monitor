@@ -124,6 +124,7 @@ tr = 178+179`；`spd = hypot(u,v)`。
 
 现在的处理：
 
+- 文件头 record **整条到齐前不推进 offset**（含 dlen 数据 + 尾部 marker）；否则 offset 会停在 44，下一轮把数据区当 marker，报 `bad main header marker 1033691254`； 
 - 文件头不是 32 时**不消耗字节**，清空 header/zsig 并回到 offset 0，下一轮重读；
 - 每次 `open/reset/truncate` 都调用 `_reset_parse()`，连 header 一起清掉；
 - `_setup()` 对 nlon/nlat/nlev/ntru 做范围校验，读到半条记录/垃圾维度时拒绝并重试；

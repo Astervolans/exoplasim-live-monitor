@@ -185,7 +185,7 @@ pwsh -NoProfile -File ".\monitor\start.ps1" -Lan
 | restart 没生效、模型冷启动 | 同上，`restartfile` 路径含空格；`check` 会拦。 |
 | 启动器退出后 collector 也跟着没了 | 本机 WSL 会回收同会话后台进程；collector 必须以**前台** `wsl.exe` 常驻（`start.ps1` 已如此），不要 `nohup ... &`。 |
 | `/api/state` 永远 0 帧、`configuring` | 模型还在编译/配置；看 `/opt/exoplasim/logs/monitor_collector.log`，确认 `plasim_snapshot` 出现。 |
-| 最新 run 一直 0 帧，日志反复 `bad main header marker 0` / `131072` | 新建的 `plasim_snapshot` 文件头还是 0/半条。当前 collector 会在 header 非 32 时回到 offset 0 重读，并在 reset 时清掉旧 header；旧版本请升级并重启。回归测试：`collector/selftest_rawburn.py`。 |
+| 最新 run 一直 0 帧，日志反复 `bad main header marker 0` / `131072` / `1033691254` | 新建的 `plasim_snapshot` 文件头还是 0/半条。当前 collector 会在 header 非 32 时回到 offset 0 重读，并在 reset 时清掉旧 header；旧版本请升级并重启。回归测试：`collector/selftest_rawburn.py`。 |
 | 浏览器连不上端口 | collector 绑 `0.0.0.0`；先在 WSL 内 `curl http://127.0.0.1:8765/api/state`，再查 Windows 防火墙 / WSL localhost 转发。 |
 | 风场全 0 | `pyfft` import 失败（看日志）；其余图层不受影响。 |
 | CPU 偏高 | 减少 `--max-runs`、把 `--interval` 调到 2 s、或缩小 `--ring`。 |

@@ -82,6 +82,15 @@ def main():
               "零开头：header=None, offset=0（实际 offset=%d）" % stream.offset)
         check(not [e for e in events if e[0] == "frame"], "零开头：不发布帧")
 
+        # 1b) 半条 header record（只有前 100 字节）：offset 必须保持 0，不能滑到 44
+        with open(raw, "wb") as fh:
+            fh.write(prefix[:100])
+        events = stream.poll([raw])
+        errs = [e for e in events if e[0] == "error"]
+        check(stream.header is None and stream.offset == 0,
+              "半条 header：offset 保持 0（实际 %d）" % stream.offset)
+        check(not errs, "半条 header：不报 bad main header marker")
+
         # 2) 真实 header 落盘：恢复并解析
         with open(raw, "wb") as fh:
             fh.write(prefix)

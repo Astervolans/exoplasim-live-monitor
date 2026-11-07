@@ -189,7 +189,7 @@ HTTP API (see [CONTRACT.md](CONTRACT.md)):
 | Frontend self-test | **24/24** against the real collector (zh and en; includes pointer hover, touch tap, land mask, freshness colour, no horizontal overflow, i18n, K→°C) |
 | Phone layout | iPhone-14 emulation 390×844 + landscape 844×390: no horizontal overflow, tap readout, pinch/zoom buttons; screenshots above |
 | LAN access | `start.ps1 -Lan` → port proxy + `LocalSubnet` firewall rule; `http://192.168.137.1:8765/` returns 200 from the host; `-LanRemove` cleans up |
-| Raw header recovery | `collector/selftest_rawburn.py`: zero prefix → valid header → truncate → rewrite, **ALL PASS**; a live T85 (256×512, 493 MB) run lists 25 frames |
+| Raw header recovery | `collector/selftest_rawburn.py`: zero prefix → partial header (offset stays 0) → valid header → truncate → rewrite, **ALL PASS**; a live T85 (256×512, 493 MB) run lists 25 frames |
 | Adaptive polling | T85 frame period ≈30–40 s → idle poll ≈9 s (cap 30 s); a 105 s probe measured the next frame within ≤0.5 s of the raw file's `mtime` change. CPU ≈1–1.5 %, RSS ≈300 MB (chunked reads). `--no-adaptive` restores fixed `--interval` |
 
 This repository also keeps a small harness for fast iteration:

@@ -287,14 +287,16 @@ class BurnStream:
         total = len(buf)
         while n + 8 <= total:
             if self.header is None:
-                # 先解析 main header + zsig 两条 record
-                if total - n < 40:
+                # 先解析 main header + zsig 两条 record。
+                # 关键：整条 header record（marker + 8 ints + trailer + dlen +
+                # data + trailer）到齐之前，绝不能推进 offset——否则下一轮会从
+                # 数据区中间开始，被当成文件头，报 bad main header marker
+                # 1033691254 (offset=44)。
+                if total - n < 44:
                     break
                 hlen = I32.unpack_from(buf, n)[0]
                 if hlen != 32:
                     # 文件刚被创建/还在写 header 时，开头可能是 0 或半条记录。
-                    # 绝不能在这里 n += 4 往下滑：一旦滑过文件头就永远同步不回来
-                    # （现象就是 bad main header marker 131072 / 0，frames=0）。
                     # 回到 offset 0，下一轮重新读；等 header 真正落盘即可恢复。
                     self._bad_header += 1
                     if self._bad_header <= 3 or self._bad_header % 60 == 0:
@@ -303,19 +305,31 @@ class BurnStream:
                                    % (hlen, self.offset)}))
                     self._reset_parse()
                     return events
-                head = HDR.unpack_from(buf, n + 4)
-                n += 40
-                if total - n < 8:
-                    break
-                dlen = I32.unpack_from(buf, n)[0]
-                n += 4
-                if total - n < dlen + 4:
-                    break
-                if not self._setup(head, np.frombuffer(buf, dtype="<f4", count=dlen // 4,
-                                                       offset=n)):
+                if I32.unpack_from(buf, n + 36)[0] != 32:
+                    self._bad_header += 1
+                    if self._bad_header <= 3:
+                        events.append(("error", None, {
+                            "msg": "bad main header trailer at offset %d"
+                                   % (self.offset + n)}))
                     self._reset_parse()
                     return events
-                n += dlen + 4
+                head = HDR.unpack_from(buf, n + 4)
+                dlen = I32.unpack_from(buf, n + 40)[0]
+                if dlen < 0 or total - n < 44 + dlen + 4:
+                    break                      # 半条 header record：下轮从 0 重读
+                if I32.unpack_from(buf, n + 44 + dlen)[0] != dlen:
+                    self._bad_header += 1
+                    if self._bad_header <= 3:
+                        events.append(("error", None, {
+                            "msg": "bad main header data trailer at offset %d"
+                                   % (self.offset + n)}))
+                    self._reset_parse()
+                    return events
+                if not self._setup(head, np.frombuffer(buf, dtype="<f4", count=dlen // 4,
+                                                       offset=n + 44)):
+                    self._reset_parse()
+                    return events
+                n += 44 + dlen + 4
                 continue
 
             # 普通变量 record: [32][hdr][32][dlen][data][dlen]

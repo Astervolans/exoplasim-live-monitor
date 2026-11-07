@@ -161,7 +161,7 @@ HTTP API（详见 [CONTRACT.md](CONTRACT.md)）：
 | 前端自检 | 对真实 collector **24/24**（中英文各一次；含指针悬停、触摸点按、陆地掩膜、更新时间颜色、无横向溢出、i18n、K→°C） |
 | 手机布局 | iPhone-14 模拟 390×844 + 横屏 844×390：无横向溢出、点按读数、双指缩放/按钮；见上方截图 |
 | 局域网 | `start.ps1 -Lan` → 端口代理 + `LocalSubnet` 防火墙；`http://192.168.137.1:8765/` 从主机访问返回 200；`-LanRemove` 可清理 |
-| raw 文件头恢复 | `collector/selftest_rawburn.py`：0 开头 → 正常头 → 截断 → 重写，**ALL PASS**；正在跑的 T85（256×512，493 MB）显示 25 帧 |
+| raw 文件头恢复 | `collector/selftest_rawburn.py`：0 开头 → 半条头（offset 保持 0）→ 正常头 → 截断 → 重写，**ALL PASS**；正在跑的 T85（256×512，493 MB）显示 25 帧 |
 | 自适应轮询 | T85 帧周期约 30–40 s → 空闲轮询约 9 s（上限 30 s）；105 s 探针测得新帧在 raw `mtime` 变化后 ≤0.5 s 内显示。CPU 约 1–1.5%，RSS 约 300 MB（分块读）。`--no-adaptive` 可恢复固定 `--interval` |
 
 仓库里还带一套快速迭代工具：
