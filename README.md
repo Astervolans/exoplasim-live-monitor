@@ -14,6 +14,8 @@ without touching the model process.
   1.00 % max of one core per run, ~2 ms per poll, ≈100 MB RSS.
 * **Multi-run** — several simulations can run at once; the top-bar selector switches
   between them (`?run=<run_id>` deep link).
+* **Any resolution** — T21/T42/T85 raw snapshots (64×128 … 256×512) are parsed
+  generically; a live 32-rank T85 run with a 493 MB snapshot produced 25 frames.
 * **Bilingual UI** — 中文 / English toggle (`?lang=en`).
 * **PC + phone** — responsive layout for desktop and portrait/landscape phones; touch
   drag, pinch zoom and tap-to-read; works over the local network / hotspot.
@@ -183,6 +185,7 @@ HTTP API (see [CONTRACT.md](CONTRACT.md)):
 | Frontend self-test | **23/23** against the real collector (zh and en; includes pointer hover, touch tap, land mask, no horizontal overflow, i18n, K→°C) |
 | Phone layout | iPhone-14 emulation 390×844 + landscape 844×390: no horizontal overflow, tap readout, pinch/zoom buttons; screenshots above |
 | LAN access | `start.ps1 -Lan` → port proxy + `LocalSubnet` firewall rule; `http://192.168.137.1:8765/` returns 200 from the host; `-LanRemove` cleans up |
+| Raw header recovery | `collector/selftest_rawburn.py`: zero prefix → valid header → truncate → rewrite, **ALL PASS**; a live T85 (256×512, 493 MB) run lists 25 frames |
 
 This repository also keeps a small harness for fast iteration:
 

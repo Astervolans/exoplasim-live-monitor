@@ -115,13 +115,29 @@ tr = 178+179`；`spd = hypot(u,v)`。
 断言 `frames_total`、step 严格递增无重复、每帧 EXOF 可解析且 step 对齐；
 `_apiprobe.py` 打印 state/EXOF/land 摘要。
 
+## 文件头恢复（bad main header marker / frames=0）
+
+模型刚创建 `plasim_snapshot`、文件头还没落盘时，文件开头可能是一段 0 字节。
+旧解析器在 `header is None` 时会 `n += 4` 一路往下滑，滑过文件头后永远同步不回来，
+日志表现为大量 `bad main header marker 0`，最后一条 `bad main header marker 131072`，
+并且 `frames=0`（131072 不是文件头，而是一条 256×128 数据的长度）。
+
+现在的处理：
+
+- 文件头不是 32 时**不消耗字节**，清空 header/zsig 并回到 offset 0，下一轮重读；
+- 每次 `open/reset/truncate` 都调用 `_reset_parse()`，连 header 一起清掉；
+- `_setup()` 对 nlon/nlat/nlev/ntru 做范围校验，读到半条记录/垃圾维度时拒绝并重试；
+- 年长固定 360 天（不再从首块二维场的第 11 个 float 里猜）。
+
+回归测试：`python collector/selftest_rawburn.py`（用真实 T85 前缀模拟 0 开头 → 正常 →
+截断 → 重写，ALL PASS）。实测 T85（256×128 谱，32 ranks，493 MB raw）可直接解析出 25 帧。
+
 ## 已知限制
 
 1. **风场依赖 `--no-physfilter` 才能与归档 npz 精确对齐**：pyburn 归档默认
    `physfilter=False`，所以做数值对照时 collector 也要关滤波；正式出图默认开滤波
    （两者差别是谱域截断，视觉上很小，但数值上会差几 m/s）。
-2. `params.ncpus` 对**已结束**的 run 通常是 
-ull`——进程数不写进 namelist；
+2. `params.ncpus` 对**已结束**的 run 通常是 `null`——进程数不写进 namelist；
    运行中的 run 从 `/proc/<pid>/cmdline` 的 `most_plasim_*_p<N>.x` 推断（实测得到 8）。
    短跑 harness 的 workdir 里 `most_plasim_run` 是 `compile.sh` 通用模板（t42_p1），不可信。
 3. `planned_months` 对 harness 截短的「年」按 `N_RUN_STEPS/每步每月` 折算
@@ -140,4 +156,6 @@ ull`——进程数不写进 namelist；
 ```bash
 # 单个 run，等一帧后打印 state / EXOF / land 摘要
 /opt/exoplasim/env/bin/python monitor/collector/_apiprobe.py http://127.0.0.1:8765 <run_id>
+/opt/exoplasim/env/bin/python monitor/collector/selftest_rawburn.py   # 文件头恢复回归
+/opt/exoplasim/env/bin/python monitor/collector/selftest_plan.py     # 年份/计划/图层
 ```

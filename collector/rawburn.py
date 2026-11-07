@@ -9,12 +9,14 @@ record 的解析位置，因此 1 Hz 轮询的 CPU 开销与文件总大小无�
 磁盘格式（由 model 的 ``outmod.f90`` 写入，little-endian，4 字节 record marker）::
 
     [32][ ihead(8*int32) ][32]                    <- main header（code=333）
-    [N*4][ zsig(N=NLAT*NLON float32) ][N*4]       <- 首块：sigma 层 + 每年天数
+    [N*4][ zsig(N=NLAT*NLON float32) ][N*4]       <- 二维场（地形/位势；不是 sigma）
     [32][ h(8*int32) ][32][dlen][ data(dlen) ][dlen]   <- 之后每条变量记录
 
     h[0]=code  h[1]=层号(1..nlev，2D 谱变量为 0)  h[3]=日内时刻编码
-    h[2]=日期编码(nday+100*nmonth+10000*nyear)    h[4]/h[5]=nlon/nlat（谱记录为 NRSP/1）
-    h[6]=step（= nstep - nstep1，自本次运行起算）  h[7]=每年天数
+    h[2]=日期编码(nday+100*nmonth+10000*nyear)    h[4]/h[5]=nlon/nlat
+    h[6]=step（= nstep - nstep1，自本次运行起算）  h[7]=ntru
+
+年长固定按 360 天（ExoPlaSim 的 year 定义），不从首块数据里猜。
 
 一条 step 的全部记录连续写出；看到**更大的 step**、文件被改名/截断、或文件连续
 若干秒不再增长，即视上一条 step 为完整帧。年末模型会把 ``plasim_snapshot`` 改名为
@@ -126,6 +128,7 @@ class BurnStream:
         self._pending = None         # RawFrame 正在拼装
         self._done_step = None       # 最近一次已发布的 step（忽略其后到达的收尾记录）
         self._scratch = b""
+        self._bad_header = 0         # 连续看到「文件头不是 32」的轮次数（用于降噪日志）
 
     # ------------------------------------------------------------------ 状态
     @property
@@ -143,6 +146,22 @@ class BurnStream:
         return np.asarray(self.sigmah, dtype=np.float64)
 
     # ------------------------------------------------------------------ 轮询
+    def _reset_parse(self):
+        """丢弃解析状态并回到文件起点。
+
+        文件名被换掉 / 被截断 / 文件头暂时是 0（模型刚创建文件、还没写 header）时，
+        必须把 header 一起清掉；只重置 offset 会让下一轮把文件头当成普通 record 解析，
+        进而出现 ``bad main header marker 131072`` 之类的连锁错误。
+        """
+        self.header = None
+        self.zsig = None
+        self.sigmah = None
+        self.nlat = self.nlon = self.nlev = self.ntru = self.ncsp = 0
+        self.days_per_year = 360
+        self.offset = 0
+        self._pending = None
+        self._done_step = None
+
     def poll(self, candidates):
         """读取新追加的字节并解析。返回事件列表。"""
         events = []
@@ -155,10 +174,8 @@ class BurnStream:
                 self._log("source gone: %s" % self.path)
                 self.path = None
                 self.src_key = None
-                self.offset = 0
                 self.last_size = 0
-                self._pending = None
-                self._done_step = None
+                self._reset_parse()
                 self.idle = 0
                 events.append(("reset", None, {"reason": "gone"}))
             return events
@@ -172,9 +189,7 @@ class BurnStream:
         if self.path is None:
             self.path = path
             self.src_key = key
-            self.offset = 0
-            self._pending = None
-            self._done_step = None
+            self._reset_parse()
             self.idle = 0
             events.append(("open", None, {"path": path}))
         elif key != self.src_key or st.st_size < self.offset:
@@ -185,9 +200,7 @@ class BurnStream:
                 "reason": "replaced" if key != self.src_key else "truncated"}))
             self.path = path
             self.src_key = key
-            self.offset = 0
-            self._pending = None
-            self._done_step = None
+            self._reset_parse()
             self.idle = 0
 
         size = st.st_size
@@ -253,10 +266,17 @@ class BurnStream:
                     break
                 hlen = I32.unpack_from(buf, n)[0]
                 if hlen != 32:
-                    events.append(("error", None, {
-                        "msg": "bad main header marker %d" % hlen}))
-                    n += 4
-                    continue
+                    # 文件刚被创建/还在写 header 时，开头可能是 0 或半条记录。
+                    # 绝不能在这里 n += 4 往下滑：一旦滑过文件头就永远同步不回来
+                    # （现象就是 bad main header marker 131072 / 0，frames=0）。
+                    # 回到 offset 0，下一轮重新读；等 header 真正落盘即可恢复。
+                    self._bad_header += 1
+                    if self._bad_header <= 3 or self._bad_header % 60 == 0:
+                        events.append(("error", None, {
+                            "msg": "bad main header marker %d (offset=%d, retry from 0)"
+                                   % (hlen, self.offset)}))
+                    self._reset_parse()
+                    return events
                 head = HDR.unpack_from(buf, n + 4)
                 n += 40
                 if total - n < 8:
@@ -265,8 +285,10 @@ class BurnStream:
                 n += 4
                 if total - n < dlen + 4:
                     break
-                self._setup(head, np.frombuffer(buf, dtype="<f4", count=dlen // 4,
-                                                offset=n))
+                if not self._setup(head, np.frombuffer(buf, dtype="<f4", count=dlen // 4,
+                                                       offset=n)):
+                    self._reset_parse()
+                    return events
                 n += dlen + 4
                 continue
 
@@ -304,18 +326,30 @@ class BurnStream:
         return events
 
     def _setup(self, head, zsig):
+        nlon, nlat, nlev, ntru = (int(head[4]), int(head[5]),
+                                  int(head[6]), int(head[7]))
+        # 防呆：正常网格 32×64（T21）到 256×512（T85+）；dims 不合理说明读到的是
+        # 半条记录/错误偏移，宁可回到 0 重试，也不要把垃圾当网格。
+        if not (2 <= nlon <= 4096 and 2 <= nlat <= 4096
+                and 1 <= nlev <= 200 and 1 <= ntru <= 512):
+            self._log("reject main header nlon=%d nlat=%d nlev=%d ntru=%d"
+                      % (nlon, nlat, nlev, ntru))
+            return False
         self.header = head
         self.zsig = np.array(zsig, dtype=np.float32)
-        self.nlon = int(head[4])
-        self.nlat = int(head[5])
-        self.nlev = int(head[6])
-        self.ntru = int(head[7])
+        self.nlon = nlon
+        self.nlat = nlat
+        self.nlev = nlev
+        self.ntru = ntru
         self.ncsp = (self.ntru + 1) * (self.ntru + 2) // 2
-        if self.zsig is not None and self.zsig.size > self.nlev:
-            self.sigmah = self.zsig[: self.nlev].copy()
-            self.days_per_year = int(round(float(self.zsig[self.nlev]))) or 360
+        # 首块是 nlat*nlon 个 float32 的二维场（约 0.5 MiB），不是 sigma 层；
+        # 之前把它的第 nlev 个值当年天数会随机得到错误年份长度。统一按 360 天。
+        self.sigmah = None
+        self.days_per_year = 360
+        self._bad_header = 0
         self._log("main header nlon=%d nlat=%d nlev=%d ntru=%d days/year=%d"
                   % (self.nlon, self.nlat, self.nlev, self.ntru, self.days_per_year))
+        return True
 
     def _on_record(self, head, buf, start, dlen):
         """处理一条变量 record；必要时发出上一帧。"""
