@@ -876,8 +876,8 @@
       var lsm = fr.layers.lsm || fr.layers[fr.header.order[0]];
       var oro = fr.layers.oro || null;
       if (lsm) globe.setLand(lsm, fr.header.nlat, fr.header.nlon);
-      if (oro) globe.setTerrain(oro, fr.header.nlat, fr.header.nlon);
-      else globe.setTerrain(null, fr.header.nlat, fr.header.nlon);
+      if (oro) globe.setTerrain(oro, fr.header.nlat, fr.header.nlon, lsm);
+      else globe.setTerrain(null, fr.header.nlat, fr.header.nlon, null);
     } catch (err) { /* 陆地可选，失败静默 */ }
   }
 

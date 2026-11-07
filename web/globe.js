@@ -499,7 +499,7 @@
 
   /* 地形高度（m）：非比例自适应显示——当前最高点固定到 uTerrainAmp 半径。
      关闭时 uTerrainOn=0，几何完全不变。 */
-  Globe.prototype.setTerrain = function (data, nlat, nlon) {
+  Globe.prototype.setTerrain = function (data, nlat, nlon, mask) {
     var gl = this.gl;
     if (!gl) return false;
     var n = nlat * nlon;
@@ -519,6 +519,7 @@
     var bytes = new Uint8Array(n);
     var inv = 255 / maxH;
     for (var j = 0; j < n; j++) {
+      if (mask && !(mask[j] > 0.5)) continue;   // 海面不显示地形
       var h = data[j];
       if (h > 0) bytes[j] = Math.min(255, Math.max(0, Math.round(h * inv)));
     }
